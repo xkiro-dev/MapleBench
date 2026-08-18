@@ -1,0 +1,492 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics.X86;
+using System.Runtime.Intrinsics;
+using System.Text;
+using MapleLib.MapleCryptoLib;
+using MapleLib.PacketLib;
+using System.Buffers;
+using System.Runtime.InteropServices;
+
+namespace MapleLib.WzLib.Util
+{
+    public sealed class WzBinaryReader : BinaryReader
+    {
+        #region Properties
+        public WzMutableKey WzKey { get; init; }
+        public uint Hash { get; set; }
+        public WzHeader Header { get; set; }
+
+        private readonly long startOffset; // the offset to 
+
+        private readonly ArrayPool<byte> s_bytePool = ArrayPool<byte>.Shared;
+        private readonly ArrayPool<char> s_charPool = ArrayPool<char>.Shared;
+
+        #endregion
+
+        #region Constructors
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="input"></param>
+        /// <param name="WzIv"></param>
+        /// <param name="startOffset"></param>
+        public WzBinaryReader(Stream input, byte[] WzIv, long startOffset = 0)
+            : base(input)
+        {
+            WzKey = WzKeyGenerator.GenerateWzKey(WzIv);
+            this.startOffset = startOffset;
+        }
+        #endregion
+
+        #region Methods
+        /// <summary>
+        /// Sets the base stream position to the header FStart + offset
+        /// </summary>
+        /// <param name="offset"></param>
+        public void SetOffsetFromFStartToPosition(int offset)
+        {
+            BaseStream.Position = (Header.FStart + offset) - startOffset;
+        }
+
+        public void RollbackStreamPosition(int byOffset)
+        {
+            if ((BaseStream.Position - startOffset) < byOffset)
+                throw new Exception("Cant rollback stream position below 0");
+
+            BaseStream.Position -= byOffset;
+        }
+
+        public string ReadStringAtOffset(long Offset)
+        {
+            return ReadStringAtOffset(Offset, false);
+        }
+
+        public string ReadStringAtOffset(long Offset, bool readByte)
+        {
+            long CurrentOffset = BaseStream.Position;
+            BaseStream.Position = Offset - startOffset;
+            if (readByte)
+            {
+                ReadByte();
+            }
+            string ReturnString = ReadString();
+            BaseStream.Position = CurrentOffset;
+            return ReturnString;
+        }
+
+        /// <summary>
+        /// Reads a string from the buffer
+        /// </summary>
+        /// <returns></returns>
+        public override string ReadString()
+        {
+            sbyte smallLength = base.ReadSByte();
+            if (smallLength == 0)
+                return string.Empty;
+
+            int length;
+            if (smallLength > 0) // Unicode
+                length = smallLength == sbyte.MaxValue ? ReadInt32() : smallLength;
+            else // ASCII
+                length = smallLength == sbyte.MinValue ? ReadInt32() : -smallLength;
+
+            if (length <= 0)
+                return string.Empty;
+
+            if (smallLength > 0) // Unicode
+                return DecodeUnicode(length);
+            else
+                return DecodeAscii(length);
+        }
+
+        /// <summary>
+        /// Decodes unicode string
+        /// </summary>
+        /// <param name="length"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private string DecodeUnicode(int length)
+        {
+            char[]? pooledArray = null;
+            try
+            {
+                Span<char> chars = length <= MemoryLimits.STACKALLOC_SIZE_LIMIT_L1
+                    ? stackalloc char[length]
+                    : (pooledArray = s_charPool.Rent(length)).AsSpan(0, length);
+
+                // Read the complete encrypted payload in one operation.  The
+                // previous implementation called BinaryReader.ReadUInt16 for
+                // every character, which repeatedly crossed the stream API and
+                // grew the mutable key one byte at a time for long strings.
+                // Decode in place so no second temporary buffer is needed.
+                int keyLength = checked(length * sizeof(ushort));
+                WzKey.EnsureKeySize(keyLength);
+                Span<ushort> encryptedChars = MemoryMarshal.Cast<char, ushort>(chars);
+                BaseStream.ReadExactly(MemoryMarshal.AsBytes(encryptedChars));
+
+                ushort mask = 0xAAAA;
+
+                for (int i = 0; i < length; i++)
+                {
+                    ushort encryptedChar = encryptedChars[i];
+                    encryptedChar ^= mask;
+                    encryptedChar ^= (ushort)((WzKey[(i * 2 + 1)] << 8) + WzKey[(i * 2)]);
+                    encryptedChars[i] = encryptedChar;
+                    mask++;
+                }
+
+                return new string(chars);
+            }
+            finally
+            {
+                if (pooledArray != null)
+                {
+                    s_charPool.Return(pooledArray);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Decodes Ascii string
+        /// </summary>
+        /// <param name="length"></param>
+        /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private string DecodeAscii(int length)
+        {
+            byte[]? pooledArray = null;
+            try
+            {
+                Span<byte> bytes = length <= MemoryLimits.STACKALLOC_SIZE_LIMIT_L1
+                    ? stackalloc byte[length]
+                    : (pooledArray = s_bytePool.Rent(length)).AsSpan(0, length);
+
+                // Read and decode the complete payload in place.  Keeping the
+                // key growth outside the loop preserves the original key stream
+                // while avoiding one stream call per byte.
+                WzKey.EnsureKeySize(length);
+                BaseStream.ReadExactly(bytes);
+
+                byte mask = 0xAA;
+
+                for (int i = 0; i < length; i++)
+                {
+                    byte encryptedChar = bytes[i];
+                    encryptedChar ^= mask;
+                    encryptedChar ^= (byte)WzKey[i];
+                    bytes[i] = encryptedChar;
+                    mask++;
+                }
+
+                // Latin-1, not ASCII. Encoding.ASCII maps every byte above 0x7F
+                // to '?' and there is no way back from that: WZ names and string
+                // properties are rewritten from memory on every save, even for
+                // images whose bodies are copied through untouched, so one save
+                // rewrote every one of them for good -- and the save-time
+                // inventory check compared the mangled names against themselves
+                // and saw nothing wrong.
+                //
+                // This is not a foreign-client edge case. Counted on the Steam
+                // depot's own archives on this machine, the one-byte strings
+                // carrying a byte above 0x7F number 136,737 in Character.wz,
+                // 6,385 in Etc.wz, 2,340 in Skill.wz and 402 in String.wz --
+                // among them "Weapon-Armor Shop" (0xB7 middle dot) and an Etc.wz
+                // tip reading "...Relation aller Fuernemmen und gedenckwuerdigen
+                // Historien..." with real umlauts. ASCII turned each of those
+                // into a '?' and every save wrote the '?' back.
+                //
+                // Latin-1 is the only single-byte encoding that maps all 256
+                // bytes to distinct characters, so it is lossless in both
+                // directions. WzBinaryWriter.WriteAsciiString already stores
+                // `(byte)c`, and its unicode threshold was moved to
+                // `c > byte.MaxValue` in the same change, so a name decoded here
+                // is written back byte for byte. The characters are not claimed
+                // to be *correct* for a client using a multi-byte code page --
+                // they are claimed to be reversible, which is what a save needs.
+                return Encoding.Latin1.GetString(bytes);
+            }
+            finally
+            {
+                if (pooledArray != null)
+                {
+                    s_bytePool.Return(pooledArray);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reads a fixed-length single-byte string, without decryption. Used for
+        /// the WZ header's ident and copyright fields.
+        ///
+        /// Latin-1 for the same reason as <see cref="DecodeAscii"/>: the header
+        /// copyright is rewritten on every save, so ASCII's '?' substitution was
+        /// permanent after one save of an archive whose header carries a byte
+        /// above 0x7F, whether or not the user changed anything.
+        /// </summary>
+        /// <param name="length">Length of bytes to read</param>
+        public string ReadString(int length)
+        {
+            byte[]? pooledArray = null;
+            try
+            {
+                Span<byte> buffer = length <= MemoryLimits.STACKALLOC_SIZE_LIMIT_L1
+                    ? stackalloc byte[length]
+                    : (pooledArray = s_bytePool.Rent(length)).AsSpan(0, length);
+
+                BaseStream.ReadExactly(buffer);
+                return Encoding.Latin1.GetString(buffer);
+            }
+            finally
+            {
+                if (pooledArray != null)
+                {
+                    s_bytePool.Return(pooledArray);
+                }
+            }
+        }
+
+        public string ReadNullTerminatedString()
+        {
+            const int initialBufferSize = 256;
+            byte[]? pooledArray = null;
+            try
+            {
+                Span<byte> buffer = stackalloc byte[initialBufferSize];
+                int position = 0;
+                byte b;
+
+                while ((b = ReadByte()) != 0)
+                {
+                    if (position == buffer.Length)
+                    {
+                        // Need to expand to array pool
+                        if (pooledArray == null)
+                        {
+                            pooledArray = s_bytePool.Rent(buffer.Length * 2);
+                            buffer.CopyTo(pooledArray);
+                        }
+                        else
+                        {
+                            var newArray = s_bytePool.Rent(pooledArray.Length * 2);
+                            pooledArray.AsSpan(0, position).CopyTo(newArray);
+                            s_bytePool.Return(pooledArray);
+                            pooledArray = newArray;
+                        }
+                        buffer = pooledArray;
+                    }
+                    buffer[position++] = b;
+                }
+
+                return Encoding.UTF8.GetString(buffer.Slice(0, position));
+            }
+            finally
+            {
+                if (pooledArray != null)
+                {
+                    s_bytePool.Return(pooledArray);
+                }
+            }
+        }
+
+        public int ReadCompressedInt()
+        {
+            sbyte sb = base.ReadSByte();
+            if (sb == sbyte.MinValue)
+            {
+                return ReadInt32();
+            }
+            return sb;
+        }
+
+        public long ReadLong()
+        {
+            sbyte sb = base.ReadSByte();
+            if (sb == sbyte.MinValue)
+            {
+                return ReadInt64();
+            }
+            return sb;
+        }
+
+        /// <summary>
+        /// The amount of bytes available remaining in the stream
+        /// </summary>
+        /// <returns></returns>
+        public long Available()
+        {
+            return BaseStream.Length - BaseStream.Position;
+        }
+
+        public long ReadOffset()
+        {
+            uint offset = (uint)BaseStream.Position;
+            offset = (offset - Header.FStart) ^ uint.MaxValue;
+            offset *= Hash;
+            offset -= WzAESConstant.WZ_OffsetConstant;
+            offset = WzTool.RotateLeft(offset, (byte)(offset & 0x1F));
+            uint encryptedOffset = ReadUInt32();
+            offset ^= encryptedOffset;
+            offset += Header.FStart * 2;
+
+            return (offset + startOffset);
+        }
+
+        /// <summary>
+        /// Decrypts List.wz string without mask
+        /// </summary>
+        /// <param name="stringToDecrypt"></param>
+        /// <returns></returns>
+        public string DecryptString(ReadOnlySpan<char> stringToDecrypt)
+        {
+            char[]? pooledArray = null;
+            try
+            {
+                Span<char> outputChars = stringToDecrypt.Length <= MemoryLimits.STACKALLOC_SIZE_LIMIT_L1
+                    ? stackalloc char[stringToDecrypt.Length]
+                    : (pooledArray = s_charPool.Rent(stringToDecrypt.Length)).AsSpan(0, stringToDecrypt.Length);
+
+                ref char outputRef = ref MemoryMarshal.GetReference(outputChars);
+                ref char inputRef = ref MemoryMarshal.GetReference(stringToDecrypt);
+
+                for (int i = 0; i < stringToDecrypt.Length; i++)
+                {
+                    Unsafe.Add(ref outputRef, i) = (char)(
+                        Unsafe.Add(ref inputRef, i) ^
+                        ((char)((WzKey[i * 2 + 1] << 8) + WzKey[i * 2]))
+                    );
+                }
+
+                return new string(outputChars);
+            }
+            finally
+            {
+                if (pooledArray != null)
+                {
+                    s_charPool.Return(pooledArray);
+                }
+            }
+        }
+
+        public string DecryptNonUnicodeString(ReadOnlySpan<char> stringToDecrypt)
+        {
+            char[]? pooledArray = null;
+            try
+            {
+                Span<char> outputChars = stringToDecrypt.Length <= MemoryLimits.STACKALLOC_SIZE_LIMIT_L1
+                    ? stackalloc char[stringToDecrypt.Length]
+                    : (pooledArray = s_charPool.Rent(stringToDecrypt.Length)).AsSpan(0, stringToDecrypt.Length);
+
+                ref char outputRef = ref MemoryMarshal.GetReference(outputChars);
+                ref char inputRef = ref MemoryMarshal.GetReference(stringToDecrypt);
+
+                for (int i = 0; i < stringToDecrypt.Length; i++)
+                {
+                    Unsafe.Add(ref outputRef, i) = (char)(Unsafe.Add(ref inputRef, i) ^ WzKey[i]);
+                }
+
+                return new string(outputChars);
+            }
+            finally
+            {
+                if (pooledArray != null)
+                {
+                    s_charPool.Return(pooledArray);
+                }
+            }
+        }
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public string ReadStringBlock(long offset) => ReadByte() switch
+        {
+            0 or WzImage.WzImageHeaderByte_WithoutOffset => ReadString(),
+            1 or WzImage.WzImageHeaderByte_WithOffset => ReadStringAtOffset(offset + ReadInt32()),
+            _ => string.Empty
+        };
+
+        #endregion
+
+        #region Tools
+        /// <summary>
+        /// Cuts out a section of the stream, and creates a new WzBinaryReader object to allow 
+        /// for concurrent file i/o reading.
+        /// </summary>
+        /// <param name="start"></param>
+        /// <param name="length"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentOutOfRangeException"></exception>
+        public WzBinaryReader CreateReaderForSection(long start, int length)
+        {
+            if (start < 0 || start >= BaseStream.Length)
+                throw new ArgumentOutOfRangeException(nameof(start));
+
+            if (length <= 0 || start + length > BaseStream.Length)
+                throw new ArgumentOutOfRangeException(nameof(length));
+
+            byte[] buffer = new byte[length];
+
+            lock (this)
+            {
+                long startPositionBeforeRead = this.BaseStream.Position; // get pos before
+
+                // read the entire region
+                BaseStream.Seek(start, SeekOrigin.Begin);
+                BaseStream.ReadExactly(buffer);
+
+                this.BaseStream.Position = startPositionBeforeRead; // reset stream pos
+            }
+
+            MemoryStream memoryStream = new MemoryStream(buffer);
+            return new WzBinaryReader(memoryStream, WzKey.GetKeys(), start)
+            {
+                WzKey = this.WzKey,
+                Hash = this.Hash,
+                Header = this.Header
+            };
+        }
+        #endregion
+
+        #region Debugging Methods
+        /// <summary>
+        /// Prints the next numberOfBytes in the stream in the system debug console.
+        /// </summary>
+        /// <param name="numberOfBytes"></param>
+        public void PrintHexBytes(int numberOfBytes)
+        {
+#if DEBUG // only debug
+            byte[]? pooledArray = null;
+            try
+            {
+                Span<byte> buffer = numberOfBytes <= MemoryLimits.STACKALLOC_SIZE_LIMIT_L1
+                    ? stackalloc byte[numberOfBytes]
+                    : (pooledArray = s_bytePool.Rent(numberOfBytes)).AsSpan(0, numberOfBytes);
+
+                BaseStream.ReadExactly(buffer);
+                //string hex = HexTool.ToString(buffer.ToArray());
+                //Debug.WriteLine(hex);
+
+                BaseStream.Position -= numberOfBytes;
+            }
+            finally
+            {
+                if (pooledArray != null)
+                {
+                    s_bytePool.Return(pooledArray);
+                }
+            }
+#endif
+        }
+        #endregion
+
+        #region Overrides
+        public override void Close()
+        {
+            // debug here
+            base.Close();
+        }
+        #endregion
+    }
+}

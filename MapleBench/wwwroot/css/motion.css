@@ -1,0 +1,256 @@
+/* ============================================================
+   Motion.
+
+   The rule throughout: movement carries meaning (where a thing came
+   from, that it changed, that it arrived) and never delays the user.
+   Routine navigation tops out at 220ms, and anything that could fire during
+   a scroll is transform/opacity only so it stays on the compositor.
+
+   Every animation below collapses to 1ms under prefers-reduced-motion,
+   which tokens.css handles globally.
+   ============================================================ */
+
+/* ---------- entrances ---------- */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes sectionEnter {
+  from { opacity: 0; transform: translateX(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes workspaceEnter {
+  from { opacity: 0; transform: scale(0.998); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes panelEnter {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes popoverIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes popoverOut {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(3px); }
+}
+@keyframes dialogIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dialogOut {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(5px) scale(0.995); }
+}
+@keyframes drawerIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes drawerOut {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateX(-8px); }
+}
+@keyframes drawerInRight {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes drawerOutRight {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateX(8px); }
+}
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes backdropOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateX(8px); }
+}
+@keyframes chipIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+.anim-rise { animation: rise var(--dur-base) var(--ease-out) both; }
+
+/**
+ * Staggered list entrance. Applied to a container; children come in one
+ * after another so a freshly loaded panel reads as arriving rather than
+ * blinking into place. Capped at six recents and 100ms total delay; long or
+ * virtualized lists never receive this class.
+ */
+.stagger > :nth-child(-n+6) { animation: rise var(--dur-base) var(--ease-out) both; }
+.stagger > :nth-child(2) { animation-delay: 20ms; }
+.stagger > :nth-child(3) { animation-delay: 40ms; }
+.stagger > :nth-child(4) { animation-delay: 60ms; }
+.stagger > :nth-child(5) { animation-delay: 80ms; }
+.stagger > :nth-child(6) { animation-delay: 100ms; }
+
+/* ---------- feedback ---------- */
+
+/** Confirms a value was written, without a toast for every keystroke. */
+@keyframes flashOk {
+  0%   { box-shadow: inset 0 0 0 2px transparent; background-color: transparent; }
+  25%  { box-shadow: inset 0 0 0 2px var(--green-fill);
+         background-color: color-mix(in srgb, var(--green-fill) 13%, transparent); }
+  100% { box-shadow: inset 0 0 0 2px transparent; background-color: transparent; }
+}
+.flash-ok { animation: flashOk var(--dur-slower) var(--ease-out); }
+
+@keyframes flashBad {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-4px); }
+  40%      { transform: translateX(4px); }
+  60%      { transform: translateX(-2px); }
+  80%      { transform: translateX(2px); }
+}
+.flash-bad { animation: flashBad var(--dur-slower) var(--ease-standard); }
+
+/* ---------- ambient ---------- */
+
+/** The unsaved chip announces itself once on arrival, then sits still. */
+.dirty-chip[data-visible="true"] { animation: chipIn var(--dur-base) var(--ease-out) both; }
+
+/** Indeterminate progress along the top of a panel during a long read. */
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(400%); }
+}
+.busy-bar {
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  overflow: hidden; background: transparent; pointer-events: none;
+}
+.busy-bar::after {
+  content: ""; position: absolute; inset: 0; width: 25%;
+  background: linear-gradient(90deg, transparent, var(--coral), transparent);
+  animation: sweep var(--dur-loop) var(--ease-in-out) infinite;
+}
+
+/* The global one sits along the BOTTOM of the topbar rather than the top, so
+   it reads as the boundary of the app filling in and does not collide with a
+   panel's own bar further down the page. The topbar is already
+   position: relative, so no host class is needed. */
+.busy-bar[data-activity="global"] { top: auto; bottom: 0; }
+
+/* The bar is absolutely positioned, so its host has to contain it. Declared
+   once here rather than re-declared in every section's stylesheet, which is
+   what happened before and is why some panels had a bar sweeping across the
+   whole window. */
+.busy-host { position: relative; overflow: hidden; }
+
+/* The first-load panel: bar, sentence, rows in the shape of what is coming. */
+.busy-panel {
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.busy-panel-text { font-size: var(--fs-12); color: var(--text-2); line-height: 1.5; }
+.busy-panel-text b { color: var(--text-1); }
+.busy-panel-rows { display: flex; flex-direction: column; gap: 8px; margin-top: var(--sp-3); }
+
+/* ---------- interactive polish ---------- */
+
+.thumb, .item-card, .recent-item, .picker-row {
+  transition: box-shadow var(--dur-fast) var(--ease-standard),
+              border-color var(--dur-fast), background var(--dur-fast);
+}
+
+/* Stable workspaces get one restrained orientation cue. JS replays these only
+   for navigation, never for a data refresh or search result repaint. */
+.workspace[data-motion="mode-enter"] {
+  animation: workspaceEnter var(--dur-base) var(--ease-out) both;
+}
+.sec-main > [data-motion="section-enter"] {
+  animation: sectionEnter var(--dur-base) var(--ease-out) both;
+}
+.tree-scroll[data-motion="panel-enter"] {
+  animation: panelEnter var(--dur-fast) var(--ease-out) both;
+}
+
+/* Shared overlay lifecycle. JS leaves a closing surface mounted until the exit
+   completes, then removes or hides it. */
+dialog[open], dialog[open][data-motion="opening"] {
+  animation: dialogIn 180ms var(--ease-out) both;
+}
+dialog[open]::backdrop { animation: backdropIn var(--dur-base) var(--ease-out) both; }
+dialog[open][data-motion="closing"] {
+  pointer-events: none;
+  animation: dialogOut var(--dur-fast) var(--ease-in) both;
+}
+dialog[open][data-motion="closing"]::backdrop {
+  animation: backdropOut 100ms var(--ease-in) both;
+}
+
+.palette[data-open="true"], .palette[data-motion="closing"] {
+  display: flex;
+  animation: backdropIn var(--dur-base) var(--ease-out) both;
+}
+.palette[data-open="true"] .palette-box,
+.palette[data-motion="opening"] .palette-box {
+  animation: popoverIn var(--dur-base) var(--ease-out) both;
+}
+.palette[data-motion="closing"] {
+  pointer-events: none;
+  animation: backdropOut 100ms var(--ease-in) both;
+}
+.palette[data-motion="closing"] .palette-box {
+  animation: popoverOut var(--dur-fast) var(--ease-in) both;
+}
+
+.ctx-menu, .ctx-menu[data-motion="opening"] {
+  animation: popoverIn var(--dur-base) var(--ease-out) both;
+}
+.ctx-menu[data-motion="closing"] {
+  pointer-events: none;
+  animation: popoverOut var(--dur-fast) var(--ease-in) both;
+}
+
+.toast, .toast[data-motion="opening"] {
+  animation: popoverIn var(--dur-base) var(--ease-out) both;
+}
+.toast[data-motion="closing"] {
+  pointer-events: none;
+  animation: toastOut var(--dur-fast) var(--ease-in) both;
+}
+
+/* Navigation should feel responsive without making the layout move under the
+   cursor. Only the label/glyph travel; each button keeps its hit target put. */
+.sec-item .sec-glyph {
+  transition: background var(--dur-fast), color var(--dur-fast),
+              box-shadow var(--dur-fast);
+}
+.sec-item[data-active="true"] .sec-glyph { box-shadow: none; }
+
+/* Palette feedback is colour and the active inset bar. Options stay put so
+   rapid keyboard navigation never makes the text jitter horizontally. */
+.palette-item { transition: background var(--dur-fast); }
+.palette-item:hover { background: var(--bg-hover); }
+
+.btn > svg, .rail button > svg { transition: color var(--dur-fast); }
+.insp-section[open] > *:not(summary) { animation: none; }
+
+/* The switch owns one real moving indicator; buttons only change ink. */
+.mode-switch button { transition: color var(--dur-fast) var(--ease-standard); }
+
+/* Skeleton rows breathe slightly out of phase so they don't look like a barcode. */
+.skeleton-row:nth-child(even) { animation-delay: 180ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rail button:hover > svg { transform: none; }
+  .busy-bar::after { animation: none; opacity: 0.5; }
+  .workspace[data-motion="mode-enter"],
+  .sec-main > [data-motion="section-enter"],
+  .tree-scroll[data-motion="panel-enter"] { animation: none; }
+  .sec-group-toggle:hover > svg { transform: none; }
+}

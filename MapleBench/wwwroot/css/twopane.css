@@ -1,0 +1,385 @@
+/* ============================================================
+   TWO-PANE IMPORT
+
+   Other client left, current writable client right, with one resizable divider.
+   Everything borrows the app's existing tree, input and button language, so
+   both sides behave like the Explorer the user already knows.
+
+   The only genuinely new visual language is the pair of drop states, and they
+   are new because the app has never had to say "into" and "replace" about the
+   same pointer position. They are deliberately as different as two indicators
+   can be: coral outline versus filled red, different label, different glyph.
+   ============================================================ */
+
+/* The shared dialog is sized for a form: `display:block`, `max-width:1360px`
+   and a `.modal-body` capped at 62vh that scrolls. All three are right for a
+   form and wrong for two trees. The fallback dialog therefore becomes a column
+   and hands the available height to the two independently scrolling panes. */
+dialog.tp-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(98vw, 1680px);
+  max-width: min(98vw, 1680px);
+  height: min(92vh, 1020px);
+  max-height: 92vh;
+}
+dialog.tp-dialog .modal-head,
+dialog.tp-dialog .modal-foot { flex: none; }
+dialog.tp-dialog .modal-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+  padding-bottom: var(--sp-2);
+}
+
+/* In normal use Dual Client View is part of the Explorer, not a modal. The
+   existing side tree and inspector step out while this focused workspace owns
+   the stage, leaving two equal Explorer panes inside the application shell. */
+.workspace[data-dual="true"] {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+}
+.workspace[data-dual="true"] .side-panel,
+.workspace[data-dual="true"] .inspector { display: none; }
+.workspace[data-dual="true"] .stage { grid-column: 2; }
+.workspace[data-dual="true"] .breadcrumb { display: none; }
+.workspace[data-dual="true"] .dual-stage {
+  padding: 0;
+  overflow: hidden;
+}
+
+.tp-inline {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-surface);
+}
+.tp-inline-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 58px;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+.tp-inline-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  color: var(--coral-ink);
+  background: var(--coral-tint);
+}
+.tp-inline-title { flex: 1; min-width: 0; }
+.tp-inline-title h2 {
+  margin: 0;
+  font-size: var(--fs-16);
+  font-weight: 720;
+}
+.tp-inline-title p {
+  margin: 2px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+}
+.tp-inline > .tp {
+  padding: var(--sp-3);
+  overflow: hidden;
+}
+
+.tp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+/* ---------------- the two panes ---------------- */
+
+.tp-panes {
+  --tp-split: 50%;
+  display: grid;
+  grid-template-columns: var(--tp-split) 10px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+
+.tp-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+/* The target side is where things land, so it carries the accent edge. It is
+   the only persistent hint about which way the gesture runs. */
+.tp-pane[data-side="target"] { border-left-color: var(--coral-fill); box-shadow: inset 3px 0 0 -1px var(--coral-fill); }
+
+.tp-pane-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-sunken);
+}
+
+.tp-pane-title { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+
+.tp-pane-role {
+  flex: none;
+  font-size: var(--fs-10);
+  font-weight: 800;
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.tp-pane[data-side="target"] .tp-pane-role { color: var(--coral-ink); }
+
+.tp-client-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-13);
+}
+
+.tp-lock {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--fs-11);
+  color: var(--text-3);
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+}
+
+.tp-pane-inputs { display: grid; grid-template-columns: minmax(0, 1fr); }
+
+.tp-input {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 8px;
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-3);
+  min-width: 0;
+}
+.tp-input:focus-within { box-shadow: var(--sh-focus); border-color: var(--border-focus); }
+.tp-input .field-input {
+  border: 0; background: transparent; box-shadow: none;
+  min-width: 0; flex: 1;
+}
+.tp-input .field-input:focus { box-shadow: none; }
+
+.tp-note {
+  display: flex; align-items: flex-start; gap: 6px;
+  font-size: var(--fs-12);
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+  background: var(--bg-field);
+  color: var(--text-2);
+}
+.tp-note[data-tone="bad"] { background: var(--red-tint); color: var(--red-ink); }
+
+/* ---- the name search results ---- */
+
+.tp-find {
+  max-height: 190px;
+  overflow: auto;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-field);
+  padding: 4px;
+}
+.tp-find[hidden] { display: none; }
+.tp-find-note { padding: 6px 8px; font-size: var(--fs-11); color: var(--text-3); }
+.tp-find-row {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0; background: transparent;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-12);
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-standard),
+              color var(--dur-fast) var(--ease-standard);
+}
+.tp-find-row:hover { background: var(--bg-hover); }
+.tp-find-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-find-meta { flex: none; font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); }
+.tp-have {
+  flex: none; font-size: 10px; font-weight: 800; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--text-3);
+  border: 1px solid var(--border); border-radius: var(--r-pill); padding: 1px 6px;
+}
+
+.tp-tree { flex: 1; min-height: 0; }
+
+/* Grab affordance on the side that is dragged FROM, and only there. */
+.tp-pane[data-side="source"] .tree-row { cursor: grab; user-select: none; }
+body[data-tp-dragging="true"] { cursor: grabbing; }
+body[data-tp-dragging="true"] .tp-pane[data-side="source"] .tree-row { cursor: grabbing; }
+
+/* The target pane while something is over it. Dimming the pane that cannot
+   receive the drop is what makes "the right-hand side is the destination"
+   legible without a word of instruction. */
+body[data-tp-dragging="true"] .tp-pane[data-side="target"] { border-color: var(--coral-fill); }
+.tp-tree[data-drop="no"] { cursor: no-drop; }
+
+/* ---------------- the splitter ---------------- */
+
+.tp-splitter {
+  display: grid; place-items: center;
+  cursor: col-resize;
+  background: transparent;
+  border: 0;
+  touch-action: none;
+}
+.tp-grip {
+  width: 3px; height: 44px;
+  border-radius: 3px;
+  background: var(--border);
+  transition: background-color var(--dur-fast) var(--ease-standard),
+              box-shadow var(--dur-fast) var(--ease-standard);
+}
+.tp-splitter:hover .tp-grip,
+.tp-splitter:focus-visible .tp-grip { background: var(--coral-fill); }
+.tp-splitter:focus-visible { outline: none; }
+.tp-splitter:focus-visible .tp-grip { box-shadow: var(--sh-focus); }
+
+/* ---------------- the drag chrome ---------------- */
+
+/* Sits in the target pane's sizer, next to .tree-rows, exactly like the
+   Explorer's own .drop-box -- a class on a pooled row would be repainted away
+   by the next scroll frame, and auto-scroll means most drags are scrolling. */
+.tp-drop {
+  position: absolute; left: 2px; right: 6px;
+  top: 0; height: var(--row-h);
+  border-radius: var(--r-md);
+  pointer-events: none;
+  z-index: 2;
+}
+/* Both washes are translucent on purpose. The row underneath is the answer to
+   "replace WHICH one", and an opaque indicator hides exactly the name the user
+   is about to destroy. Everything that distinguishes the two is therefore in
+   the frame and the label: dashed coral with a plain caption, versus solid red
+   with a filled badge. */
+.tp-drop[data-mode="into"] {
+  border: 2px dashed var(--coral-fill);
+  background: color-mix(in srgb, var(--coral-fill) 10%, transparent);
+}
+.tp-drop::after {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  font-size: 10px; font-weight: 800; letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+.tp-drop[data-mode="into"]::after {
+  content: "add here";
+  color: var(--coral-ink);
+}
+.tp-drop[data-mode="replace"] {
+  border: 2px solid var(--red-fill);
+  background: color-mix(in srgb, var(--red-fill) 20%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red-fill) 45%, transparent);
+}
+.tp-drop[data-mode="replace"]::after {
+  content: "replace";
+  color: var(--text-on-fill);
+  background: var(--red-fill);
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+}
+
+.tp-ghost {
+  position: fixed; left: 0; top: 0;
+  z-index: var(--z-tooltip);
+  max-width: 380px;
+  padding: 7px 11px;
+  display: flex; flex-direction: column; gap: 3px;
+  font-size: var(--fs-12); line-height: 1.35;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--coral-fill);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-xl);
+  pointer-events: none;
+}
+.tp-ghost[data-mode="replace"] { border-left-color: var(--red-fill); }
+.tp-ghost[data-mode="no"] { border-left-color: var(--border-strong); color: var(--text-2); }
+
+.tp-ghost-head { display: flex; align-items: baseline; gap: 7px; }
+.tp-ghost-mode {
+  flex: none;
+  font-size: 10px; font-weight: 800; letter-spacing: var(--ls-caps);
+  padding: 1px 6px; border-radius: var(--r-sm);
+  background: var(--coral-fill); color: var(--text-on-fill);
+}
+.tp-ghost[data-mode="replace"] .tp-ghost-mode { background: var(--red-fill); }
+.tp-ghost[data-mode="no"] .tp-ghost-mode { background: var(--bg-active); color: var(--text-3); }
+.tp-ghost-label { font-weight: 700; color: var(--text-1); }
+.tp-ghost-hint { color: var(--text-3); font-size: var(--fs-11); }
+.tp-ghost-hint[hidden] { display: none; }
+.tp-ghost-plan {
+  margin-top: 2px; padding-top: 4px;
+  border-top: 1px dashed var(--border);
+  font-size: var(--fs-11);
+  color: var(--text-2);
+  font-variant-numeric: var(--tnum);
+}
+.tp-ghost-plan[hidden] { display: none; }
+.tp-ghost-plan[data-tone="wait"] { color: var(--text-3); font-style: italic; }
+.tp-ghost-plan[data-tone="bad"] { color: var(--red-ink); }
+.tp-ghost-plan[data-tone="warn"] { color: var(--amber-ink); }
+
+/* ---------------- conflict choice ---------------- */
+
+.tp-conflict {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  color: var(--text-1);
+}
+.tp-conflict-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-lg);
+  background: var(--amber-tint);
+  color: var(--amber-ink);
+}
+.tp-conflict p {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1.5;
+}
+
+/* ---------------- narrow windows ---------------- */
+
+@media (max-width: 900px) {
+  .tp-panes {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--tp-split) 10px minmax(0, 1fr);
+  }
+  .tp-splitter { cursor: row-resize; }
+  .tp-grip { width: 44px; height: 3px; }
+  .tp-pane[data-side="target"] { box-shadow: inset 0 3px 0 -1px var(--coral-fill); }
+}

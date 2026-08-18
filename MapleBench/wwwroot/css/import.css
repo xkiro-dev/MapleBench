@@ -1,0 +1,271 @@
+/* ============================================================
+   THE IMPORT PICKER
+
+   Deliberately borrows the Database section's card and thumbnail geometry
+   rather than inventing a second one. Someone who has searched the client in
+   Database has already learned this screen, and two grids of icon-plus-name
+   rows that differ by four pixels is the kind of difference that costs
+   attention and buys nothing.
+
+   Lives in its own file, loaded last, so it can lean on app.css tokens and on
+   the .picker-row and .tree-* rules it reuses without either of them having to
+   know about it.
+   ============================================================ */
+
+.imp { display: flex; flex-direction: column; gap: var(--sp-3); min-height: 0; }
+
+.imp-field { display: flex; flex-direction: column; gap: 4px; }
+.imp-label { font-size: var(--fs-12); color: var(--text-2); }
+.imp-row { display: flex; gap: 6px; }
+
+.imp-crumb {
+  padding: 6px 10px;
+  font-size: var(--fs-12); color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ---- the archive list ---- */
+
+/* The whole row is the Open button. Opening is the cheap action -- seconds and
+   no disk -- and giving it the whole row rather than a button on the right is
+   how the screen says which of the two things here is the ordinary one. */
+.imp-archive { width: 100%; text-align: left; }
+.imp-archive:disabled { opacity: 0.5; cursor: not-allowed; }
+.imp-archive[data-open="true"] .imp-archive-go { color: var(--text-3); }
+
+.imp-archive-meta {
+  flex: 1; min-width: 0; padding-left: 10px;
+  font-size: var(--fs-12); color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.imp-archive-go {
+  flex: none; margin-left: 10px;
+  font-size: var(--fs-11); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--coral-ink);
+}
+.imp-archive[aria-busy="true"] { cursor: progress; }
+
+/* Dual View's primary route is the folder, not one archive. It stays in the
+   same list because the individual archive route remains useful on low-memory
+   machines, but the tinted first row makes the complete-client choice clear. */
+.imp-client {
+  background: var(--coral-soft, var(--bg-selected));
+  border-bottom: 1px solid var(--coral-fill, var(--border));
+}
+.imp-client:hover { background: var(--coral-faint, var(--bg-hover)); }
+.imp-client .name { color: var(--text-1); font-weight: 700; }
+
+/* ---- the opened-archive header ---- */
+
+.imp-head { display: flex; align-items: center; gap: var(--sp-3); }
+.imp-head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.imp-head-sub { font-size: var(--fs-11); color: var(--text-3); }
+
+/* Stated on the screen and not only in a tooltip. That this archive cannot be
+   written to is the entire safety argument for pointing the app at a client
+   somebody actually plays, and an argument nobody can see is not one. */
+.imp-lock {
+  flex: none; display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: var(--r-pill);
+  background: var(--bg-sunken); color: var(--text-3);
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+}
+
+/* ---- the source-side gap ---- */
+
+/* Tone and shape come from .notice in app.css now; only the button row is this
+   screen's business. */
+.imp-gap-actions { display: flex; gap: 6px; flex-wrap: wrap; align-self: center; }
+
+.imp-hint { display: block; font-size: var(--fs-11); color: var(--text-3); line-height: 1.5; }
+
+/* ---- toolbar ---- */
+
+.imp-toolbar {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+}
+.imp-search {
+  flex: 1; min-width: 220px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-3);
+}
+.imp-search input { border: 0; background: none; flex: 1; min-width: 0; }
+.imp-search input:focus { outline: none; box-shadow: none; }
+
+/* ---- results ---- */
+
+/* Fixed height, not min-height. The panel below it -- what is ticked, and the
+   two Import buttons -- must not walk up and down the dialog as results arrive,
+   because the button a user is reaching for moving out from under the cursor is
+   how the wrong thing gets pressed. */
+.imp-results {
+  position: relative;
+  min-height: 180px; max-height: min(38vh, 340px);
+  overflow: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: var(--sp-2);
+}
+
+.imp-result-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
+  font-size: var(--fs-11); color: var(--text-3);
+  position: sticky; top: 0; z-index: 1;
+  padding: 2px 0; background: var(--bg-panel, var(--bg-surface));
+}
+
+.imp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--sp-2);
+}
+
+.imp-card {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}
+.imp-card:hover { background: var(--bg-hover); }
+.imp-card[data-picked="true"] { border-color: var(--coral-ink); background: var(--bg-selected); }
+.imp-card:focus-within { border-color: var(--border-focus); box-shadow: var(--sh-focus); }
+
+.imp-check { flex: none; width: 15px; height: 15px; cursor: pointer; }
+
+.imp-thumb {
+  display: grid; place-items: center; flex: none;
+  width: 42px; height: 42px; border-radius: var(--r-md); overflow: hidden;
+  background-color: var(--checker-a);
+  background-image:
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-b) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+}
+/* Nearest-neighbour, like every other sprite in the app: a 32x31 mob frame
+   smoothed by the browser is a blurry smear rather than pixel art. */
+.imp-thumb img { image-rendering: pixelated; max-width: 100%; max-height: 100%; }
+.imp-thumb .placeholder { color: var(--text-3); opacity: 0.7; }
+
+.imp-card-text { flex: 1; min-width: 0; }
+.imp-card-name {
+  font-size: var(--fs-13); font-weight: 650; line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.imp-card-id {
+  font-size: var(--fs-11); color: var(--text-3); font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ---- the tree, as the second way in ---- */
+
+/* Height is pinned so the virtualizer has a viewport to measure. It reads
+   scroller.clientHeight to decide how many rows to build, and a host that sizes
+   to its content reports zero -- which renders nothing at all and looks like a
+   tree that failed to load. */
+.imp-tree { height: min(38vh, 340px); border: 1px solid var(--border); border-radius: var(--r-md); }
+
+/* The tick box is appended last by buildRow so paintRow's positional read stays
+   valid for the Explorer, which has no box at all. Its place in the row is a
+   layout question, so it is answered here. */
+.tree-check { order: -1; flex: none; margin-right: 2px; width: 14px; height: 14px; cursor: pointer; }
+
+/* ---- what is ticked, and the two Imports ---- */
+
+/* Stuck to the bottom of the modal body.
+   The results panel scrolls inside its own box, but the dialog itself scrolls
+   too once the gap warning and a long note are both up -- and the first casualty
+   was the Import button, which sat below the fold on a 1000px window with 200
+   results on screen. A primary action you have to go looking for is one that
+   gets pressed by accident on the way past. */
+.imp-tray {
+  position: sticky; bottom: 0; z-index: 2;
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-2) 0 2px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel, var(--bg-surface));
+}
+.imp-tray-text {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  font-size: var(--fs-12); line-height: 1.5;
+}
+.imp-tray-text > span:first-child { flex: 1; min-width: 0; }
+.imp-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+
+/* ---- shared notes and empties ---- */
+
+.imp-note, .imp-empty {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: var(--fs-12); line-height: 1.55; color: var(--text-2);
+}
+.imp-note { padding: 6px 2px; color: var(--text-3); }
+/* Dashed is still right HERE and only here: this is the box that says "choose
+   a folder", i.e. an outline around something not yet supplied. The failure
+   states that used to share it -- a red dashed box, which reads as a drop
+   target that has gone wrong -- are .notice[data-tone="bad"] now, alongside
+   every other failure in the app. */
+.imp-empty {
+  padding: 20px; justify-content: center; text-align: left;
+  border: 1px dashed var(--border); border-radius: var(--r-md);
+}
+.imp-empty p { margin: 4px 0 0; color: var(--text-3); }
+.imp-note[data-tone="bad"] { color: var(--red-ink); }
+
+/* An entry the target client already holds.
+   Greyed and unpickable rather than hidden: "you already have this" is a useful
+   answer, and a row that simply vanished would read as the search missing it.
+   Ids are added between MapleStory builds rather than reassigned, so this is a
+   reliable statement about the id -- though not about the content, which is why
+   it can be turned back on. */
+.imp-card[data-already="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+.imp-card[data-already="true"]:hover { background: var(--bg-surface); }
+.imp-have {
+  margin-left: auto;
+  align-self: center;
+  font-size: var(--fs-10);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  padding: 1px 7px;
+}
+.imp-result-head [data-active="true"] { color: var(--coral-ink); }
+
+
+/* ============================================================
+   MEMORY HEADROOM, IN THE OPEN DIALOG
+
+   Sits under the file list and above the path box, so the number arrives while
+   the selection is still being made. Two tones and no third: a note, and a
+   warning. It is never an error, because the count it is derived from is an
+   upper bound -- see paintHeadroom in picker.js.
+   ============================================================ */
+.picker-headroom {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  line-height: 1.5;
+}
+.picker-headroom[data-tone="warn"] {
+  border-color: var(--warn-border, var(--amber-line, var(--border)));
+  background: var(--warn-bg, var(--amber-wash, var(--bg-subtle)));
+}
+.picker-headroom b { color: var(--text-1); }

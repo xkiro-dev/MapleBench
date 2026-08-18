@@ -1,0 +1,600 @@
+/* ============================================================
+   The Skills section.
+
+   Deliberately built from the same parts as Mobs and Cash Shop: the stat tiles
+   (.stat-chip), the filter pills (.cat-tab), the pager (.pager) and the tips
+   box (.tips) are reused from cashshop.css rather than re-cut here, so the
+   sections cannot drift apart visually. Everything below is either genuinely
+   new -- the level table, the formula editor, the bake preview -- or a
+   skill-named twin of a panel where the class name would otherwise read as a
+   lie.
+
+   The one thing this file adds to a shared class is two stat-tile tones. The
+   section counts broken formulas, and there was no red tone to count them in.
+   ============================================================ */
+
+.stat-value[data-tone="amber"] { color: var(--amber-ink); }
+.stat-value[data-tone="red"]   { color: var(--red-ink); }
+
+.skills {
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: auto;
+  padding: var(--sp-4) var(--sp-6) var(--sp-8);
+  gap: var(--sp-4);
+}
+
+.sk-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--sp-4);
+}
+
+.sk-empty-actions { display: flex; gap: var(--sp-2); }
+
+/* --- header --- */
+.sk-head { display: flex; align-items: center; gap: var(--sp-3); }
+.sk-head-text { flex: 1; min-width: 0; }
+.sk-head-title { font-size: var(--fs-18); font-weight: 700; letter-spacing: var(--ls-tight); }
+.sk-head-sub { font-size: var(--fs-12); color: var(--text-3); }
+.sk-head-sub b { color: var(--text-2); }
+.sk-head-warn { color: var(--amber-ink); }
+
+.sk-select {
+  height: 34px; max-width: 320px; padding: 0 var(--sp-2);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+  font-size: var(--fs-13); cursor: pointer;
+}
+.sk-select:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+
+/* --- stats --- */
+.sk-stats { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+
+/* --- toolbar --- */
+.sk-toolbar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.sk-toolbar + .sk-toolbar { margin-top: var(--sp-3); }
+.sk-search { position: relative; flex: 1 1 240px; min-width: 190px; }
+.sk-search input {
+  width: 100%; height: 38px; padding: 0 var(--sp-3) 0 var(--sp-8);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+}
+.sk-search input:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+.sk-search .icon {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3);
+}
+
+.sk-note {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3);
+  background: var(--amber-tint); color: var(--amber-ink);
+  border-radius: var(--r-md); font-size: var(--fs-12); line-height: 1.5;
+}
+
+/* --- selection bar --- */
+.sk-selbar {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+.sk-selcount { font-size: var(--fs-13); color: var(--text-3); margin-right: auto; }
+.sk-selbar[data-active="true"] .sk-selcount { color: var(--coral-ink); font-weight: 700; }
+
+.sk-result-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  font-size: var(--fs-13); color: var(--text-2); margin-bottom: var(--sp-3);
+}
+
+/* ============================================================
+   CARD GRID
+   ============================================================ */
+.sk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: var(--sp-4);
+}
+
+.sk-card {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: none;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
+}
+.sk-card:hover { border-color: var(--border-strong); }
+.sk-card[data-selected="true"] { border-color: var(--coral-fill); box-shadow: var(--sh-focus); }
+
+.sk-card-head { display: flex; align-items: flex-start; gap: var(--sp-2); }
+.sk-card-title { flex: 1; min-width: 0; }
+.sk-pick { flex: none; display: grid; place-items: center; padding-top: 2px; }
+.sk-pick input { width: 17px; height: 17px; accent-color: var(--coral-fill); cursor: pointer; }
+
+/* The skill's own art, on a checkerboard so a transparent icon reads as
+   transparent rather than as a hole in the card. Same treatment as the
+   Database result thumb. */
+.sk-icon {
+  display: grid; place-items: center; flex: none;
+  border-radius: var(--r-md); overflow: hidden;
+  background-color: var(--checker-a);
+  background-image:
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-b) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+}
+/* Nearest-neighbour: these are 32px sprites drawn at 1-2x, and smoothing turns
+   a crisp icon into a smear. */
+.sk-icon img { image-rendering: pixelated; }
+.sk-icon .placeholder { color: var(--text-3); opacity: 0.75; }
+
+.sk-title {
+  font-size: var(--fs-14); font-weight: 700; line-height: 1.25;
+  color: var(--text-1); text-align: left; word-break: break-word;
+}
+.sk-title:hover { color: var(--coral-ink); }
+.sk-sub { font-size: var(--fs-11); color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+.sk-level {
+  flex: none;
+  background: var(--blue-tint); color: var(--blue-ink);
+  font-size: var(--fs-11); font-weight: 700;
+  padding: 3px 9px; border-radius: var(--r-pill);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+.sk-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.sk-badge {
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; padding: 3px 8px; border-radius: var(--r-pill);
+  background: var(--bg-sunken); color: var(--text-3);
+}
+/* Storage is the most important thing on the card, so it gets the strongest
+   separation: purple for computed, green for stored, amber for the mixed case
+   that is a trap. Never colour alone -- the badge always carries its word. */
+.sk-badge[data-kind="formula"]  { background: var(--purple-tint); color: var(--purple-ink); }
+.sk-badge[data-kind="explicit"] { background: var(--green-tint);  color: var(--green-ink); }
+.sk-badge[data-kind="mixed"]    { background: var(--amber-tint);  color: var(--amber-ink); }
+.sk-badge[data-kind="bad"]      { background: var(--red-tint);    color: var(--red-ink); }
+.sk-badge[data-kind="dirty"]    { background: var(--coral-tint);  color: var(--coral-ink); }
+
+.sk-row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-field);
+  border-radius: var(--r-md);
+  font-size: var(--fs-13);
+}
+.sk-row .k { color: var(--text-3); flex: none; }
+.sk-row .v {
+  margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sk-row code.v { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--purple-ink); }
+
+/* Zero controls at rest, same as a mob card: the values are the content. */
+.sk-actions { display: flex; gap: var(--sp-2); margin-top: auto; padding-top: var(--sp-2); }
+.sk-actions .btn { justify-content: center; }
+.sk-card .sk-actions { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.sk-card:hover .sk-actions,
+.sk-card:focus-within .sk-actions { opacity: 1; }
+
+/* ============================================================
+   THE SKILL DIALOG
+   ============================================================ */
+.sk-detail { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.sk-detail-head {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.sk-detail-id { min-width: 200px; }
+.sk-detail-name { font-size: var(--fs-16); font-weight: 700; }
+
+/* The one failure in this domain that costs an evening and produces no error.
+   Amber rather than red: nothing is broken yet, and the strip is a warning
+   about what an edit below would not do. */
+.sk-trap {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--amber-tint); color: var(--amber-ink);
+  border: 1px solid color-mix(in srgb, var(--amber-ink) 30%, transparent);
+  border-radius: var(--r-md);
+}
+.sk-trap-text { flex: 1; font-size: var(--fs-12); line-height: 1.5; }
+
+/* Values the client supplies and the archive does not carry. Sits directly
+   under the trap strip because it is the same kind of statement -- something
+   true about this skill that the table below cannot show on its own -- and
+   because the boxes have to be visible from the rows that reference them. */
+.sk-varbar {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  padding: var(--sp-3);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.sk-varbar-lead {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--fs-12); color: var(--text-2);
+}
+.sk-var { display: inline-flex; align-items: center; gap: 6px; }
+.sk-var-name {
+  font-family: var(--font-mono); font-size: var(--fs-11);
+  color: var(--amber-ink); background: var(--amber-tint);
+  padding: 2px 6px; border-radius: var(--r-sm);
+}
+.sk-var-input { width: 88px; text-align: right; }
+
+/* --- sections inside the dialog --- */
+.sk-section {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.sk-section > summary {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-3);
+  cursor: pointer; list-style: none;
+  font-size: var(--fs-13);
+}
+.sk-section > summary::-webkit-details-marker { display: none; }
+.sk-section > summary::before {
+  content: ""; flex: none;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  color: var(--text-3);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.sk-section[open] > summary::before { transform: rotate(90deg); }
+.sk-section > summary:hover { background: var(--bg-hover); }
+
+/* The level table is not collapsible -- it is the reason the dialog exists --
+   so it gets the same frame with a plain bar instead of a summary. */
+.sk-section-bar {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  padding: var(--sp-3);
+  font-size: var(--fs-13);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.sk-section-name { font-weight: 700; color: var(--text-1); }
+.sk-section-meta { color: var(--text-3); font-size: var(--fs-12); }
+.sk-section-bad {
+  margin-left: auto;
+  background: var(--red-tint); color: var(--red-ink);
+  font-size: var(--fs-11); font-weight: 700;
+  padding: 2px 8px; border-radius: var(--r-pill);
+}
+
+.sk-hint { font-size: var(--fs-10); color: var(--text-3); line-height: 1.45; padding: 0 var(--sp-3) var(--sp-3); }
+.sk-formula .sk-hint, .sk-field .sk-hint, .sk-bulk-field .sk-hint { padding: 0; }
+.sk-link {
+  color: var(--coral-ink); font-size: var(--fs-10); text-decoration: underline;
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+
+.sk-key {
+  font-family: var(--font-mono); font-size: var(--fs-10);
+  background: var(--bg-sunken); color: var(--text-3);
+  padding: 1px 5px; border-radius: var(--r-xs);
+}
+.sk-unit { font-size: var(--fs-10); color: var(--text-3); }
+.sk-tag {
+  font-size: var(--fs-10); font-weight: 700;
+  padding: 1px 6px; border-radius: var(--r-pill);
+  background: var(--bg-sunken); color: var(--text-3);
+}
+
+.sk-input {
+  width: 100%; height: 32px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+  font-size: var(--fs-13); font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.sk-input:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+.sk-input[data-invalid="true"] { border-color: var(--red-fill); background: var(--red-tint); }
+.sk-mono { font-family: var(--font-mono); font-size: var(--fs-12); }
+.sk-jump { width: 96px; }
+
+.sk-check { display: flex; align-items: center; gap: 8px; height: 32px; font-size: var(--fs-13); cursor: pointer; }
+.sk-check input { width: 17px; height: 17px; accent-color: var(--coral-fill); cursor: pointer; }
+
+/* ============================================================
+   FORMULAS
+   The source of truth for 81% of a client, so they are shown as text to be
+   read and edited, not as a diagnostic.
+   ============================================================ */
+.sk-formulas {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--sp-3);
+  padding: 0 var(--sp-3) var(--sp-3);
+}
+.sk-formula { display: flex; flex-direction: column; gap: 5px; }
+.sk-formula-label { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.sk-formula-name { font-size: var(--fs-11); font-weight: 700; color: var(--text-2); }
+.sk-formula[data-source="formula"] .sk-formula-name { color: var(--purple-ink); }
+.sk-formula[data-source="error"] .sk-input { border-color: var(--red-fill); background: var(--red-tint); }
+
+.sk-formula-static {
+  font-family: var(--font-mono); font-size: var(--fs-12);
+  padding: 7px 10px; border-radius: var(--r-md);
+  background: var(--bg-sunken); color: var(--text-3);
+}
+.sk-formula-error {
+  display: flex; align-items: flex-start; gap: 5px;
+  font-size: var(--fs-10); line-height: 1.45; color: var(--red-ink);
+}
+
+/* ============================================================
+   THE LEVEL TABLE
+   ============================================================ */
+.sk-table-scroll {
+  max-height: 52vh; overflow: auto;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.sk-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-12); }
+
+.sk-table thead th {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  text-align: left; vertical-align: bottom;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.sk-th-label {
+  display: block;
+  font-size: var(--fs-11); font-weight: 700; color: var(--text-1);
+}
+.sk-th-key {
+  display: block;
+  font-family: var(--font-mono); font-size: var(--fs-10); font-weight: 400; color: var(--text-3);
+}
+/* The expression the column came from, under its name. This is the only place
+   a formula column's source is visible while reading the numbers it produced. */
+.sk-th-formula {
+  display: block; max-width: 190px;
+  overflow: hidden; text-overflow: ellipsis;
+  margin-top: 3px;
+  font-family: var(--font-mono); font-size: var(--fs-10); font-weight: 400;
+  color: var(--purple-ink);
+}
+.sk-table thead th[data-source="error"] .sk-th-formula { color: var(--red-ink); }
+.sk-table thead th[data-source="explicit"] .sk-th-key { color: var(--green-ink); }
+
+/* The level column stays put while the fields scroll sideways: a row of numbers
+   whose level has scrolled off the left is a row of numbers about nothing. */
+.sk-th-level {
+  position: sticky; left: 0; z-index: calc(var(--z-sticky) + 1);
+  background: var(--bg-raised);
+  text-align: left; font-weight: 700;
+  padding: 0 var(--sp-2);
+  border-right: 1px solid var(--border);
+}
+.sk-table thead .sk-th-level { z-index: calc(var(--z-sticky) + 2); }
+
+.sk-level-btn {
+  padding: 4px 8px; border-radius: var(--r-sm);
+  background: transparent; color: var(--text-1);
+  font-size: var(--fs-12); font-weight: 700; font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.sk-level-btn:hover { background: var(--bg-hover); color: var(--coral-ink); }
+/* A level with no node of its own -- the row exists only because a formula
+   covers it. Marked, not hidden: it is the difference between a value the
+   client stores and one it computes. */
+.sk-ghost { color: var(--text-3); font-size: var(--fs-14); }
+.sk-table tr[data-present="false"] .sk-th-level { color: var(--text-3); }
+
+.sk-table tbody td {
+  padding: 2px var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.sk-table tbody tr:hover td { background: var(--bg-hover); }
+.sk-table tbody tr:hover .sk-th-level { background: var(--bg-hover); }
+
+.sk-cell-input {
+  height: 26px; min-width: 84px; padding: 0 7px;
+  border-color: transparent; background: transparent;
+  font-family: var(--font-mono); font-size: var(--fs-12);
+}
+.sk-cell-input:hover { border-color: var(--border); background: var(--bg-field); }
+.sk-cell-input:focus { border-color: var(--border-focus); background: var(--bg-field); }
+/* A cell with no node yet. Dashed, because typing here creates one. */
+td[data-source="missing"] .sk-cell-input { border-style: dashed; border-color: var(--border); opacity: 0.75; }
+td[data-source="missing"] .sk-cell-input:focus { opacity: 1; border-style: solid; }
+
+/* A computed cell. Not an input, not styled like one, and not selectable-into:
+   its value comes from an expression and there is nowhere for an edit to go.
+   The colour matches the formula panel and the "Formulas" badge, so the same
+   idea is the same colour everywhere in the section. */
+.sk-cell-computed {
+  display: block; padding: 4px 7px;
+  font-family: var(--font-mono); font-size: var(--fs-12);
+  color: var(--purple-ink);
+  border-left: 2px solid color-mix(in srgb, var(--purple-ink) 40%, transparent);
+  cursor: help;
+}
+/* A constant is the same at every level and a container is a group of values.
+   Neither is a curve, so neither takes the formula colour -- reading "3
+   entries" in the same purple as a computed damage would say it came from an
+   expression, and it did not. */
+td[data-source="constant"] .sk-cell-computed,
+td[data-source="container"] .sk-cell-computed {
+  color: var(--text-3);
+  border-left-color: var(--border);
+}
+td[data-source="container"] .sk-cell-computed { font-style: italic; }
+.sk-cell-bad {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 7px;
+  color: var(--red-ink); font-weight: 700; cursor: help;
+}
+
+/* Amber, not red. The formula is sound; a value it reads has not been supplied
+   yet, and colouring that as damage sends people looking for a bug that is not
+   there. The cell names the variable so the fix is obvious from the cell. */
+.sk-cell-needs {
+  display: inline-flex; align-items: center;
+  padding: 3px 7px; border-radius: var(--r-sm);
+  background: var(--amber-tint); color: var(--amber-ink);
+  font-family: var(--font-mono); font-size: var(--fs-10);
+  cursor: help;
+}
+td[data-source="needs"] { background: color-mix(in srgb, var(--amber-tint) 45%, transparent); }
+
+.sk-legend {
+  display: flex; flex-wrap: wrap; gap: var(--sp-3);
+  padding: var(--sp-3);
+  font-size: var(--fs-10); color: var(--text-3);
+}
+.sk-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.sk-swatch {
+  width: 10px; height: 10px; border-radius: var(--r-xs);
+  border: 1px solid var(--border); background: var(--bg-field);
+}
+.sk-swatch[data-source="formula"]  { background: var(--purple-tint); border-color: var(--purple-ink); }
+.sk-swatch[data-source="constant"] { background: var(--bg-sunken); }
+.sk-swatch[data-source="missing"]  { background: transparent; border-style: dashed; }
+.sk-swatch[data-source="error"]    { background: var(--red-tint); border-color: var(--red-fill); }
+.sk-swatch[data-source="needs"]    { background: var(--amber-tint); border-color: var(--amber-fill); }
+.sk-swatch[data-source="explicit"] { background: var(--bg-field); border-color: var(--border-strong); }
+
+/* ============================================================
+   SKILL-WIDE FIELDS
+   ============================================================ */
+.sk-group-name {
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--text-3);
+  padding: 0 var(--sp-3) var(--sp-2);
+}
+.sk-field-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--sp-3);
+  padding: 0 var(--sp-3) var(--sp-3);
+}
+.sk-field { display: flex; flex-direction: column; gap: 5px; }
+.sk-field-label { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.sk-field-name { font-size: var(--fs-11); font-weight: 700; color: var(--text-2); }
+.sk-field-static {
+  padding: 7px 10px; border-radius: var(--r-md);
+  background: var(--bg-sunken); color: var(--text-3);
+  font-family: var(--font-mono); font-size: var(--fs-12);
+}
+
+/* ============================================================
+   BAKE AND BULK
+   ============================================================ */
+.sk-bake, .sk-bulk { display: flex; flex-direction: column; gap: var(--sp-4); }
+.sk-bake-lede { margin: 0; font-size: var(--fs-13); color: var(--text-2); line-height: 1.55; }
+.sk-bake-grid, .sk-bulk-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--sp-3);
+}
+.sk-bulk-field { display: flex; flex-direction: column; gap: 5px; }
+.sk-bulk-field > label { font-size: var(--fs-11); font-weight: 700; color: var(--text-2); }
+.sk-bulk-field .sk-select, .sk-bulk-field .sk-input { width: 100%; max-width: none; }
+.sk-bake-actions, .sk-bulk-actions { display: flex; gap: var(--sp-2); }
+
+/* Reads green while the switch is in the correct position and red while it is
+   not, because "delete the common block" sounds destructive and is in fact the
+   only setting that makes the bake do anything. */
+.sk-bake-warn {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  font-size: var(--fs-12); line-height: 1.5;
+}
+.sk-bake-warn[data-tone="ok"]  { background: var(--green-tint); color: var(--green-ink); }
+.sk-bake-warn[data-tone="bad"] { background: var(--red-tint);   color: var(--red-ink); }
+
+.sk-preview-host { min-height: 64px; }
+.sk-preview-empty {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-field); border-radius: var(--r-md);
+  font-size: var(--fs-12); color: var(--text-3); line-height: 1.5;
+}
+.sk-preview-empty[data-tone="bad"] { background: var(--red-tint); color: var(--red-ink); }
+
+.sk-preview-summary {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--sp-2); margin-bottom: var(--sp-3);
+}
+.sk-preview-stat {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-field); border-radius: var(--r-md);
+}
+.sk-preview-stat .k {
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--text-3);
+}
+.sk-preview-stat .v { font-size: var(--fs-18); font-weight: 700; font-variant-numeric: tabular-nums; }
+.sk-preview-stat[data-tone="warn"] .v { color: var(--amber-ink); }
+
+/* What the bake deletes, named node by node. "The common block is removed" is
+   not enough when the block is the only copy of the curve. */
+.sk-delete-box {
+  padding: var(--sp-3);
+  background: var(--red-tint);
+  border: 1px solid color-mix(in srgb, var(--red-ink) 28%, transparent);
+  border-radius: var(--r-md);
+  margin-bottom: var(--sp-3);
+}
+.sk-delete-head {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--red-ink); font-size: var(--fs-12); margin-bottom: var(--sp-2);
+}
+.sk-delete-list {
+  max-height: 132px; overflow: auto;
+  display: grid; gap: 2px;
+  font-size: var(--fs-11);
+}
+.sk-delete-list code { font-family: var(--font-mono); color: var(--red-ink); font-weight: 700; }
+.sk-delete-value { font-family: var(--font-mono); color: var(--text-2); }
+.sk-delete-box .sk-hint { padding: var(--sp-2) 0 0; }
+
+.sk-notes {
+  margin: 0 0 var(--sp-3); padding-left: 18px;
+  font-size: var(--fs-12); color: var(--text-2); line-height: 1.5;
+}
+
+.sk-preview-head {
+  display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap;
+  font-size: var(--fs-13); font-weight: 600; margin-bottom: var(--sp-2);
+}
+.sk-preview-trunc { font-size: var(--fs-11); font-weight: 500; color: var(--amber-ink); }
+
+.sk-preview-scroll { max-height: 40vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+.sk-preview { width: 100%; border-collapse: collapse; font-size: var(--fs-12); }
+.sk-preview th {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  text-align: left; padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--text-3);
+  background: var(--bg-raised); border-bottom: 1px solid var(--border);
+}
+.sk-preview td {
+  padding: 5px var(--sp-3); border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.sk-preview td.num { font-variant-numeric: tabular-nums; font-weight: 600; }
+.sk-preview code { font-family: var(--font-mono); font-size: var(--fs-11); }
+.sk-preview-name { font-weight: 600; color: var(--text-1); }
+.sk-preview-arrow { color: var(--text-3); text-align: center; width: 24px; }
+.sk-preview-note { color: var(--amber-ink); font-size: var(--fs-11); }
+/* A skipped row still shows its current value -- greying the whole row to
+   invisibility would hide the number that explains why it was skipped. */
+.sk-preview tr[data-skipped="true"] td { background: var(--bg-sunken); color: var(--text-3); }
+.sk-preview tr[data-skipped="true"] .sk-preview-name { color: var(--text-3); }

@@ -1,0 +1,185 @@
+using System;
+using System.IO;
+using System.Text;
+using MapleLib.Helpers;
+using MapleLib.WzLib.Util;
+
+namespace MapleLib.WzLib.WzProperties
+{
+	/// <summary>
+	/// A property with a string as a value
+	/// </summary>
+	public class WzStringProperty : WzImageProperty
+	{
+		#region Fields
+		internal string name, val;
+		internal WzObject parent;
+		//internal WzImage imgParent;
+		#endregion
+
+		#region Inherited Members
+        public override void SetValue(object value)
+        {
+            val = (string)value;
+        }
+
+        public override WzImageProperty DeepClone()
+        {
+            WzStringProperty clone = new WzStringProperty(name, val);
+            return clone;
+        }
+
+		public override object WzValue { get { return Value; } }
+		/// <summary>
+		/// The parent of the object
+		/// </summary>
+		public override WzObject Parent { get { return parent; } internal set { parent = value; } }
+		/*/// <summary>
+		/// The image that this property is contained in
+		/// </summary>
+		public override WzImage ParentImage { get { return imgParent; } internal set { imgParent = value; } }*/
+		/// <summary>
+		/// The WzPropertyType of the property
+		/// </summary>
+		public override WzPropertyType PropertyType { get { return WzPropertyType.String; } }
+		/// <summary>
+		/// The name of the property
+		/// </summary>
+		public override string Name { get { return name; } set { name = value; } }
+		public override void WriteValue(WzBinaryWriter writer)
+		{
+			writer.Write((byte)8);
+			writer.WriteStringValue(Value, 0, 1);
+		}
+		public override void ExportXml(StreamWriter writer, int level)
+		{
+			writer.WriteLine(XmlUtil.Indentation(level) + XmlUtil.EmptyNamedValuePair("WzString", this.Name, this.Value));
+		}
+		/// <summary>
+		/// Disposes the object
+		/// </summary>
+		public override void Dispose()
+		{
+			name = null;
+			val = null;
+		}
+		#endregion
+
+		#region Custom Members
+		/// <summary>
+		/// The value of the property
+		/// </summary>
+		public string Value { get { return val; } set { val = value; } }
+
+		/// <summary>
+		/// Creates a blank WzStringProperty
+		/// </summary>
+		public WzStringProperty() { }
+		/// <summary>
+		/// Creates a WzStringProperty with the specified name
+		/// </summary>
+		/// <param name="name">The name of the property</param>
+		public WzStringProperty(string name)
+		{
+			this.name = name;
+		}
+		/// <summary>
+		/// Creates a WzStringProperty with the specified name and value
+		/// </summary>
+		/// <param name="name">The name of the property</param>
+		/// <param name="value">The value of the property</param>
+		public WzStringProperty(string name, string value)
+		{
+			this.name = name;
+			this.val = value;
+		}
+
+		/// <summary>
+		/// Spine runtime related resources
+		/// p.s just assuming it should be, if its a WzStingProperty and .atlas, .skel or .json until there is a better way to detect it
+		/// </summary>
+		public bool IsSpineRelatedResources
+		{
+			get { return (name.EndsWith(".atlas") || name.Equals("atlas", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".json") || name.EndsWith(".skel")); }
+		}
+
+		public bool IsSpineAtlasResources
+		{
+			get { return (name.EndsWith(".atlas") || name.Equals("atlas", StringComparison.OrdinalIgnoreCase)); }
+        }
+
+        /// <summary>
+        /// Parses date time string representation to DateTime object
+        /// <string name="start" value="2006072000"/>
+        /// <string name="end" value="2006100100" />
+        /// </summary>
+        /// <returns></returns>
+        public DateTime? GetDateTime()
+        {
+            string dateExpire = GetString();
+            if (string.IsNullOrEmpty(dateExpire))
+                return null;
+
+            string parseStr = dateExpire.Length == 10 ? "yyyyMMddHH" : (dateExpire.Length == 12 ? "yyyyMMddHHmm" : null);
+            if (parseStr == null)
+                return null;
+            if (DateTime.TryParseExact(dateExpire, parseStr, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime result))
+                return result;
+            return null;
+        }
+
+        /// <summary>
+        /// Sets the DateTime as a string representation
+        /// </summary>
+        /// <param name="value"></param>
+        public void SetDateValue(DateTime value)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append(value.Year.ToString().PadLeft(4, '0'));
+            sb.Append(value.Month.ToString().PadLeft(2, '0'));
+            sb.Append(value.Day.ToString().PadLeft(2, '0'));
+            sb.Append(value.Hour.ToString().PadLeft(2, '0'));
+            if (value.Minute != 0)
+                sb.Append(value.Minute.ToString().PadLeft(2, '0'));
+
+            Value = sb.ToString(); // 2010100700
+        }
+        #endregion
+
+        #region Cast Values
+        public override int GetInt()
+		{
+			int outvalue = 0;
+			int.TryParse(val, out outvalue);
+
+			return outvalue; // stupid nexon . fu, some shit that should be WzIntProperty
+		}
+
+		public override short GetShort()
+		{
+			short outvalue = 0;
+			short.TryParse(val, out outvalue);
+
+			return outvalue; // stupid nexon . fu, some shit that should be WzIntProperty
+		}
+
+		public override long GetLong()
+		{
+			long outvalue = 0;
+			long.TryParse(val, out outvalue);
+
+			return outvalue; // stupid nexon . fu, some shit that should be WzIntProperty
+		}
+
+        public override string GetString()
+        {
+            return val;
+        }
+
+        public override string ToString()
+        {
+            return val;
+        }
+        #endregion
+	}
+}

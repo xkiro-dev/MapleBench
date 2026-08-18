@@ -1,0 +1,199 @@
+/* Generation chooser. Scoped entirely under .gc-* / .genchoice, so load order
+   barely matters; it borrows the app's tokens and defines no palette of its
+   own — the two decision colours come from the shared success/danger tokens so
+   "accept" and "reject" mean here what they mean everywhere else. */
+
+.genchoice {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.gc-head h2 { margin: 0 0 4px; font-size: var(--fs-18); }
+.gc-sub { margin: 0; color: var(--text-2); font-size: var(--fs-13); line-height: 1.5; }
+.gc-inner { font-family: var(--font-mono); font-size: var(--fs-12); }
+
+.gc-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  padding: 14px 16px;
+}
+.gc-card h3 { margin: 0 0 6px; font-size: var(--fs-14); }
+.gc-failed { border-color: var(--red-fill); }
+.gc-note p { margin: 4px 0; color: var(--text-2); font-size: var(--fs-12); line-height: 1.5; }
+
+.gc-controls { display: flex; flex-direction: column; gap: 6px; }
+.gc-label { color: var(--text-2); font-size: var(--fs-12); margin-top: 6px; }
+.gc-donors { font-family: var(--font-mono); font-size: var(--fs-12); resize: vertical; }
+.gc-row { display: grid; grid-template-columns: auto 120px auto 1fr; gap: 8px; align-items: center; }
+.gc-row .gc-label { margin-top: 0; }
+.gc-check {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+  color: var(--text-2); font-size: var(--fs-12);
+}
+.gc-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.gc-hint { color: var(--text-3); font-size: var(--fs-12); }
+
+/* ---- the running count and the build bar ---- */
+
+.gc-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-sm, 0 1px 4px rgba(0, 0, 0, 0.25));
+}
+.gc-bar-counts { display: flex; gap: 8px; align-items: center; }
+.gc-bar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.gc-chip {
+  padding: 2px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+.gc-chip-accept { border-color: var(--green-fill); color: var(--green-fill); }
+.gc-chip-reject { border-color: var(--red-fill); color: var(--red-fill); }
+
+/* ---- one skill ---- */
+
+.gc-group {
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  padding: 12px 14px;
+}
+.gc-group[data-decision='accept'] { border-left-color: var(--green-fill); }
+.gc-group[data-decision='reject'] { border-left-color: var(--red-fill); }
+
+.gc-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.gc-group-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gc-skill-id { font-family: var(--font-mono); font-size: var(--fs-14); font-weight: 600; }
+.gc-skill-name { font-size: var(--fs-13); color: var(--text-1); }
+.gc-skill-meta { color: var(--text-2); font-size: var(--fs-12); line-height: 1.4; }
+
+.gc-group-buttons { display: flex; gap: 8px; flex-shrink: 0; }
+.gc-accept[data-on='true'] {
+  background: var(--green-fill);
+  border-color: var(--green-fill);
+  color: #fff;
+}
+.gc-reject[data-on='true'] {
+  background: var(--red-fill);
+  border-color: var(--red-fill);
+  color: #fff;
+}
+
+/* ---- the two panes ---- */
+
+.gc-panes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+@media (max-width: 900px) { .gc-panes { grid-template-columns: 1fr; } }
+
+.gc-pane {
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  min-width: 0;
+}
+.gc-pane h4 { margin: 0 0 2px; font-size: var(--fs-12); }
+.gc-pane-sub { margin: 0 0 8px; color: var(--text-2); font-size: var(--fs-12); line-height: 1.4; }
+.gc-pane-empty { color: var(--text-2); font-size: var(--fs-12); font-style: italic; }
+
+.gc-sets { display: flex; flex-wrap: wrap; gap: 12px; }
+.gc-set { margin: 0; display: flex; flex-direction: column; gap: 4px; max-width: 100%; }
+
+/* The composed animation box. The checker background makes transparent art
+   readable and tells a genuinely blank frame apart from a missing one. */
+.gc-anim {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background:
+    conic-gradient(var(--bg-hover, rgba(127, 127, 127, 0.18)) 90deg, transparent 90deg 180deg,
+                   var(--bg-hover, rgba(127, 127, 127, 0.18)) 180deg 270deg, transparent 270deg) 0 0/16px 16px,
+    var(--bg-field);
+  image-rendering: pixelated;
+}
+.gc-frame { position: absolute; display: block; }
+.gc-frame-missing {
+  border: 1px dashed var(--red-fill);
+  background: repeating-linear-gradient(45deg, transparent 0 6px, rgba(192, 57, 43, 0.15) 6px 12px);
+}
+
+.gc-caption {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+  max-width: 240px;
+}
+.gc-caption-name { font-family: var(--font-mono); color: var(--text-1); }
+
+.gc-group-notes { margin-top: 8px; }
+.gc-group-notes p { margin: 2px 0; color: var(--text-2); font-size: var(--fs-12); }
+
+/* ---- the result ---- */
+
+.gc-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+.gc-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+.gc-stat-label { color: var(--text-2); font-size: var(--fs-11); }
+.gc-stat-value { font-family: var(--font-mono); font-size: var(--fs-13); }
+
+.gc-install { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.gc-install code {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-field);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  line-height: 1.5;
+  word-break: break-all;
+  user-select: all;
+}
+
+.gc-still, .gc-failures { margin-top: 10px; }
+.gc-still summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-12); }
+.gc-mono { margin: 2px 0; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-2); }
+.gc-failures p { margin: 2px 0; color: var(--red-fill); font-size: var(--fs-12); }
+
+.gc-confirm p { margin: 0 0 10px; font-size: var(--fs-13); line-height: 1.5; }

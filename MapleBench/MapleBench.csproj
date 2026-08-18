@@ -1,0 +1,74 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>annotations</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- MapleLib is a WinForms/WPF-flavoured net10.0-windows library; matching the
+         desktop framework keeps System.Drawing.Bitmap available for canvas rendering. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+
+    <AssemblyTitle>MapleBench</AssemblyTitle>
+    <Description>Windows WZ editor and dependency-aware MapleStory client importer with visual previews and verified saves</Description>
+    <Product>MapleBench</Product>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+
+    <RootNamespace>MapleBench</RootNamespace>
+
+    <!-- Gives the exe, taskbar and Alt-Tab a real icon instead of the
+         generic .NET one. DesktopShell loads the same file at runtime for
+         the window itself. -->
+    <ApplicationIcon>MapleBench.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="MapleBench.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\dependencies\MapleLib\MapleLib.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Hosts the UI in a real window instead of a browser tab. The Edge
+         runtime it needs ships with Windows 10/11; DesktopShell falls back to
+         the browser when it is missing. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3124.44" />
+  </ItemGroup>
+
+  <!-- The WebView2 package hands every .NET 5+ project three assemblies: Core,
+       WinForms and Wpf. We host in WinForms and never touch the WPF control,
+       but Microsoft.Web.WebView2.Wpf.dll references WindowsBase 5.0.0.0 (WPF's).
+       Since MapleLib stopped setting UseWPF, the only WindowsBase in the graph
+       is the 4.0.0.0 facade in Microsoft.NETCore.App.Ref, and RAR reports the
+       unresolvable conflict as MSB3277 on every build. Dropping the reference we
+       do not use is the fix; adding WPF back to satisfy a DLL nothing calls
+       would cost 32 MB to silence one warning.
+
+       This has to be a target rather than a plain ItemGroup: NuGet imports the
+       package's .targets after the project body, so the Reference does not exist
+       yet at evaluation time. -->
+  <Target Name="DropUnusedWebView2WpfReference" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <_WebView2WpfReference Include="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+      <Reference Remove="@(_WebView2WpfReference)" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <!-- The host serves wwwroot from AppContext.BaseDirectory so the built
+         output runs standalone; the Web SDK does not copy it there by default. -->
+    <!-- ExcludeFromSingleFile="false" is what puts the UI *inside* the exe.
+         The Web SDK's own wwwroot glob sets it to true, so without this a
+         single-file publish leaves wwwroot as loose files next to the exe and
+         "the standalone build" opens a blank window. Item metadata cannot be
+         overridden from the command line, so it has to live here. -->
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="false" />
+  </ItemGroup>
+
+</Project>

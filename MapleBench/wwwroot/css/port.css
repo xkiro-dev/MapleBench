@@ -1,0 +1,309 @@
+/* ============================================================
+   PORT DIALOG
+
+   Cross-client porting. It lives only inside a modal, so there is no mode
+   layout here -- everything below is scoped to .port and the plan it renders.
+
+   The colour rule the whole screen follows: green means "this will be copied",
+   amber means "the target already has one and it is being left alone", red
+   means "this cannot be done". Nothing is red merely for being skipped, because
+   skipping is the safe outcome and the eye should not be pulled to it.
+   ============================================================ */
+
+.port {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* ---------- from -> into ---------- */
+
+.port-route {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-sunken);
+  border-radius: var(--r-lg);
+}
+
+.port-end { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+.port-end-label {
+  font-size: var(--fs-11);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.port-fixed-target {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  color: var(--text-1);
+}
+.port-fixed-target > svg { flex: none; color: var(--green-ink); }
+.port-fixed-target > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: var(--fs-12);
+}
+
+/* The archive list under each end can be long; it wraps rather than stretching
+   the dialog, because the dialog width is what keeps the parts table readable. */
+.port-end-sub {
+  font-size: var(--fs-11);
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+.port-arrow { display: flex; color: var(--coral-ink); }
+
+/* ---------- options ---------- */
+
+.port-options { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.port-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-3);
+  align-items: start;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+.port-option:hover { background: var(--bg-hover); }
+.port-option > span { display: flex; flex-direction: column; gap: 2px; }
+.port-option-label { font-size: var(--fs-13); font-weight: 600; }
+
+/* The overwrite toggle is the one control here that can destroy something, so
+   it carries the danger colour the moment it is on -- not only in the confirm
+   that follows, which is too late to be a warning. */
+.port-option[data-danger="true"] { border-color: var(--red-tint); }
+.port-option[data-danger="true"]:has(input:checked) {
+  background: var(--red-tint);
+  border-color: var(--red-ink);
+}
+
+.port-actions { display: flex; gap: var(--sp-2); }
+
+/* ---------- preview ---------- */
+
+.port-empty,
+.port-blocked {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-sunken);
+  border-radius: var(--r-md);
+  font-size: var(--fs-13);
+  color: var(--text-2);
+}
+
+.port-empty[data-tone="bad"],
+.port-blocked { background: var(--red-tint); color: var(--red-ink); }
+
+/* The "showing 200 of 4,067" notice, which has to read as a caveat rather than
+   as furniture -- it is the sentence that says the list below it is a sample. */
+.port-empty[data-tone="warn"] { background: var(--amber-tint); color: var(--amber-ink); }
+
+.port-plan { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.port-totals { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.port-totals .stat-value[data-tone="good"] { color: var(--green-ink); }
+.port-totals .stat-value[data-tone="warn"] { color: var(--amber-ink); }
+.port-totals .stat-value[data-tone="bad"]  { color: var(--red-ink); }
+
+.port-result {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  font-size: var(--fs-13);
+}
+
+.port-result[data-tone="good"] { background: var(--green-tint); color: var(--green-ink); }
+.port-result[data-tone="warn"] { background: var(--amber-tint); color: var(--amber-ink); }
+
+/* ---------- collapsible note blocks ---------- */
+
+.port-section {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.port-section > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--bg-sunken);
+}
+
+.port-section[data-tone="warn"] > summary { background: var(--amber-tint); color: var(--amber-ink); }
+.port-section[data-tone="muted"] > summary { color: var(--text-2); }
+.port-section > summary .port-hint { margin-left: auto; font-weight: 400; }
+
+.port-lines { margin: 0; padding: var(--sp-3) var(--sp-4) var(--sp-3) var(--sp-6); }
+.port-lines li { font-size: var(--fs-13); color: var(--text-2); margin-bottom: var(--sp-2); }
+.port-lines li:last-child { margin-bottom: 0; }
+
+/* ---------- one entry, and its parts ---------- */
+
+.port-items { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.port-item {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+}
+
+.port-item-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.port-item-name { font-size: var(--fs-14); font-weight: 650; }
+.port-item-id {
+  font-size: var(--fs-11);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  margin-left: var(--sp-2);
+}
+
+.port-badge {
+  margin-left: auto;
+  font-size: var(--fs-11);
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--blue-tint);
+  color: var(--blue-ink);
+}
+
+.port-parts { width: 100%; border-collapse: collapse; font-size: var(--fs-12); }
+.port-parts td { padding: var(--sp-2); vertical-align: top; border-top: 1px solid var(--border-subtle); }
+.port-parts tr:first-child td { border-top: 0; }
+
+/* The rows that will actually be written are the ones to find at a glance;
+   everything else is context. A left band rather than a fill, so a table of
+   twelve rows does not become twelve blocks of colour. */
+.port-parts tr[data-write="true"] td:first-child { box-shadow: inset 2px 0 0 var(--green-fill); }
+
+.port-part-icon { width: 22px; color: var(--text-3); }
+.port-part-label { min-width: 0; overflow-wrap: anywhere; }
+.port-part-status { width: 118px; }
+.port-part-note { color: var(--text-3); }
+
+.port-chip {
+  display: inline-block;
+  padding: 1px var(--sp-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-11);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.port-chip[data-tone="good"]  { background: var(--green-tint); color: var(--green-ink); }
+.port-chip[data-tone="warn"]  { background: var(--amber-tint); color: var(--amber-ink); }
+.port-chip[data-tone="bad"]   { background: var(--red-tint);   color: var(--red-ink); }
+
+.port-note {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  background: var(--bg-sunken);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-12);
+  color: var(--text-2);
+}
+
+.port-hint { font-size: var(--fs-11); color: var(--text-3); }
+.port-hint[data-tone="bad"] { color: var(--red-ink); }
+
+/* The written row's "where did it go". Styled as the path it is rather than as
+   a button, because a row of buttons down the table would compete with the
+   status chips for the eye -- it only has to look clickable close up. */
+.port-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-11);
+  color: var(--text-3);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.port-path:hover { color: var(--coral-ink); text-decoration: underline; }
+
+/* Inside the result banner the shortfall list is the message, not an aside, so
+   it inherits the banner's amber rather than the muted note colour. */
+.port-result .port-lines { padding: var(--sp-2) 0 0 var(--sp-4); }
+.port-result .port-lines li { color: inherit; }
+
+/* ---------- suggestions ---------- */
+
+.port-suggestions { display: flex; flex-direction: column; padding: var(--sp-2); }
+
+.port-suggestion {
+  display: grid;
+  grid-template-columns: 84px 1fr 2fr auto;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: var(--sp-2);
+  font-size: var(--fs-12);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.port-suggestion:first-child { border-top: 0; }
+.port-suggestion b { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 720px) {
+  .port-route { grid-template-columns: 1fr; }
+  .port-arrow { transform: rotate(90deg); justify-content: center; }
+  .port-suggestion { grid-template-columns: 1fr; }
+}
+
+/* The one line that stands in for parts nobody needs to read.
+   Quiet on purpose: it is a count, not a warning, and styling it like a warning
+   would put back exactly the noise it exists to remove. */
+.port-quiet {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 4px; padding: 2px 6px;
+  background: none; border: 0; border-radius: var(--r-sm);
+  font-size: var(--fs-10); color: var(--text-3); cursor: pointer;
+}
+.port-quiet:hover { background: var(--bg-sunken); color: var(--text-2); }
+
+/* The elapsed count on a running port.
+ *
+ * Tabular figures so the number does not shuffle the text beside it every
+ * time it ticks -- that movement reads as a redraw, which is the opposite of
+ * the reassurance it is there to give. */
+.port-elapsed {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+  margin-left: 0.15rem;
+}

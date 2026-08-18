@@ -1,0 +1,591 @@
+using System.Collections.Generic;
+using System.IO;
+using System;
+using MapleLib.WzLib.Util;
+using MapleLib.WzLib.WzProperties;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Diagnostics;
+
+namespace MapleLib.WzLib
+{
+    /// <summary>
+    /// A .img contained in a wz directory
+    /// </summary>
+    public class WzImage : WzObject, IPropertyContainer
+    {
+        //TODO: nest wzproperties in a wzsubproperty inside of WzImage
+
+        /// <summary>
+        /// bExistID_0x73
+        /// </summary>
+        public const int WzImageHeaderByte_WithoutOffset = 0x73;
+        /// <summary>
+        /// bNewID_0x1b
+        /// </summary>
+        public const int WzImageHeaderByte_WithOffset = 0x1B;
+        /// <summary>
+        /// bLuaID_0x01
+        /// </summary>
+        public const int WzImageHeaderByte_Lua = 0x01;
+
+        #region Fields
+        internal bool parsed = false;
+        internal bool bIsImageChanged = false;
+
+        internal string name;
+        internal int size;
+        private int checksum;
+        internal long offset = 0;
+        internal WzBinaryReader reader; // could be a WzBinaryReader or a WzBinaryConcurrentReader
+        internal byte[] WzIv;
+        internal WzPropertyCollection properties;
+        internal WzObject parent;
+        internal int blockStart = 0;
+        internal long tempFileStart = 0;
+        internal long tempFileEnd = 0;
+
+        private bool parseEverything = false;
+
+        /// <summary>
+        /// Wz image embedding .lua file.
+        /// </summary>
+        public bool IsLuaWzImage
+        {
+            get { return Name.EndsWith(".lua", StringComparison.OrdinalIgnoreCase); } // TODO: find some ways to avoid user from adding a new image with .lua name
+        }
+        #endregion
+
+        #region Constructors\Destructors
+        /// <summary>
+        /// Creates a blank WzImage
+        /// </summary>
+        public WzImage() {
+
+            this.properties = new WzPropertyCollection(this);
+        }
+        /// <summary>
+        /// Creates a WzImage with the given name
+        /// </summary>
+        /// <param name="name">The name of the image</param>
+        public WzImage(string name)
+        {
+            this.name = name;
+            this.Changed = true; // default for new item.
+
+            this.properties = new WzPropertyCollection(this);
+        }
+        public WzImage(string name, Stream dataStream, WzMapleVersion mapleVersion)
+        {
+            this.name = name;
+            this.WzIv = WzTool.GetIvByMapleVersion(mapleVersion);
+            this.reader = new WzBinaryReader(dataStream, WzIv);
+
+            this.properties = new WzPropertyCollection(this);
+        }
+        internal WzImage(string name, WzBinaryReader reader)
+        {
+            this.name = name;
+            this.reader = reader;
+            this.blockStart = (int)reader.BaseStream.Position;
+            this.checksum = 0;
+
+            this.properties = new WzPropertyCollection(this);
+        }
+
+        /// <summary>
+        /// WzImage Constructor
+        /// </summary>
+        /// <param name="name"></param>
+        /// <param name="reader"></param>
+        /// <param name="checksum"></param>
+        /// <param name="unk_GMS230"></param>
+        internal WzImage(string name, WzBinaryReader reader, int checksum)
+        {
+            this.name = name;
+            this.reader = reader;
+            this.blockStart = (int)reader.BaseStream.Position;
+            this.checksum = checksum;
+
+            this.properties = new WzPropertyCollection(this);
+        }
+
+        public override void Dispose()
+        {
+            name = null;
+            if (properties != null)
+            {
+                foreach (WzImageProperty prop in properties)
+                {
+                    prop.Dispose();
+                }
+                properties.Clear();
+                properties = null;
+            }
+            if (reader != null)
+            {
+                reader.Close();
+                reader.Dispose();
+                reader = null;
+            }
+        }
+        #endregion
+
+        #region Inherited Members
+        /// <summary>
+		/// The parent of the object
+		/// </summary>
+		public override WzObject Parent { get { return parent; } internal set { parent = value; } }
+
+        /// <summary>
+        /// The name of the image
+        /// </summary>
+        public override string Name { get { return name; } set { name = value; } }
+        public override WzFile WzFileParent { get { return Parent != null ? Parent.WzFileParent : null; } }
+
+        /// <summary>
+        /// Is the object parsed
+        /// </summary>
+        public bool Parsed { get { return parsed; } set { parsed = value; } }
+
+        /// <summary>
+        /// Set the property if the image should be fully parsed
+        /// </summary>
+        public bool ParseEverything { get { return parseEverything; } set { this.parseEverything = value; } } 
+
+        /// <summary>
+        /// Was the image changed
+        /// </summary>
+        public bool Changed { get { return bIsImageChanged; } set { bIsImageChanged = value; } }
+        /// <summary>
+        /// The size in the wz file of the image
+        /// </summary>
+        public int BlockSize { get { return size; } set { size = value; } }
+        /// <summary>
+        /// The checksum of the image
+        /// </summary>
+        public int Checksum { 
+            get { return this.checksum; }
+            private set {  } 
+        }
+        /// <summary>
+        /// The offset of the start of this image
+        /// </summary>
+        public long Offset { get { return offset; } set { offset = value; } }
+        public int BlockStart { get { return blockStart; } }
+        /// <summary>
+        /// The WzObjectType of the image
+        /// </summary>
+        public override WzObjectType ObjectType
+        {
+            get
+            {
+                if (reader != null)
+                    if (!parsed)
+                        ParseImage();
+                return WzObjectType.Image;
+            }
+        }
+
+        /// <summary>
+        /// The properties contained in the image
+        /// </summary>
+        public WzPropertyCollection WzProperties
+        {
+            get
+            {
+                if (reader != null && !parsed)
+                {
+                    ParseImage();
+                }
+                return properties;
+            }
+        }
+
+        public WzImage DeepClone()
+        {
+            // Same reasoning as SaveImage: a discarded parse result produced a clone
+            // with zero properties that looked like a legitimately empty image, and
+            // the clone is normally then written to an archive.
+            if (reader != null && !parsed && !ParseImage())
+            {
+                throw new InvalidDataException(
+                    $"The image '{FullPath ?? Name}' could not be parsed, so it cannot be cloned. " +
+                    "The clone would be empty and would silently replace its contents.");
+            }
+            WzImage clone = new(name)
+            {
+                bIsImageChanged = true
+            };
+            foreach (WzImageProperty prop in properties)
+                clone.AddProperty(prop.DeepClone());
+            return clone;
+        }
+
+        /// <summary>
+        /// Gets a wz property by it's name
+        /// </summary>
+        /// <param name="name">The name of the property</param>
+        /// <returns>The wz property with the specified name</returns>
+        public new WzImageProperty this[string name]
+        {
+            get
+            {
+                if (reader != null) 
+                    if (!parsed) 
+                        ParseImage();
+                
+                return properties.FindByName(name);
+            }
+            set
+            {
+                if (value != null)
+                {
+                    value.Name = name;
+                    AddProperty(value);
+                }
+            }
+        }
+        #endregion 
+
+        #region Custom Members
+        /// <summary>
+		/// Gets a WzImageProperty from a path
+		/// </summary>
+		/// <param name="path">path to object</param>
+		/// <returns>the selected WzImageProperty</returns>
+        public WzImageProperty GetFromPath(string path)
+        {
+            if (reader != null) if (!parsed) ParseImage();
+
+            if (string.IsNullOrWhiteSpace(path))
+                return null;
+
+            WzImageProperty ret = null;
+            WzPropertyCollection currentProperties = properties;
+            ReadOnlySpan<char> remainingPath = path.AsSpan();
+            bool isFirstSegment = true;
+            while (!remainingPath.IsEmpty)
+            {
+                int separatorIndex = remainingPath.IndexOf('/');
+                ReadOnlySpan<char> segment = separatorIndex < 0 ? remainingPath : remainingPath[..separatorIndex];
+                remainingPath = separatorIndex < 0 ? default : remainingPath[(separatorIndex + 1)..];
+                if (segment.IsEmpty)
+                    continue;
+                if (isFirstSegment && segment.SequenceEqual(".."))
+                    return null;
+                isFirstSegment = false;
+
+                ret = null;
+                foreach (WzImageProperty property in currentProperties)
+                {
+                    if (property.Name.AsSpan().SequenceEqual(segment))
+                    {
+                        ret = property;
+                        break;
+                    }
+                }
+                if (ret == null)
+                    return null;
+                currentProperties = ret.WzProperties;
+                if (currentProperties == null && !remainingPath.IsEmpty)
+                    return null;
+            }
+
+            return ret;
+        }
+
+        /// <summary>
+        /// Adds a property to the WzImage
+        /// </summary>
+        /// <param name="prop">Property to add</param>
+        public void AddProperty(WzImageProperty prop)
+        {
+            if (this[prop.Name] != null)
+            {
+                throw new Exception(string.Format("Trying to add a WzImageProperty with a name ['{0}'] that is already being used by another property.", prop.Name));
+            }
+            if (reader != null && !parsed)
+            {
+                ParseImage();
+            }
+            properties.Add(prop); // parent is set to 'prop' here
+            Changed = true; // Mark image as changed when property is added
+        }
+        /// <summary>
+        /// Add a list of properties to the WzImage
+        /// </summary>
+        /// <param name="props"></param>
+        public void AddProperties(WzPropertyCollection props)
+        {
+            foreach (WzImageProperty prop in props)
+            {
+                AddProperty(prop);
+            }
+        }
+        /// <summary>
+        /// Removes a property by its child object
+        /// </summary>
+        /// <param name="name">The name of the property to remove</param>
+        public void RemoveProperty(WzImageProperty prop)
+        {
+            if (!properties.Contains(prop))
+                return;
+
+            if (reader != null && !parsed)
+                ParseImage();
+            prop.Parent = null;
+            properties.Remove(prop);
+            Changed = true; // Mark image as changed when property is removed
+        }
+
+        /// <summary>
+        /// Removes a property by name
+        /// </summary>
+        /// <param name="propertyName"></param>
+        public void RemoveProperty(string propertyName)
+        {             
+            WzImageProperty prop = this[propertyName];
+            if (prop != null)
+            {
+                RemoveProperty(prop);
+            }
+        }
+
+        public void ClearProperties()
+        {
+            foreach (WzImageProperty prop in properties)
+                prop.Parent = null;
+            properties.Clear();
+            Changed = true; // Mark image as changed when properties are cleared
+        }
+
+        public override void Remove()
+        {
+            if (Parent != null)
+            {
+                ((WzDirectory)Parent).RemoveImage(this);
+            }
+        }
+        #endregion
+
+        #region Parsing Methods
+        /// <summary>
+        /// Calculates and set the image header checksum
+        /// </summary>
+        /// <param name="memStream"></param>
+        /// <summary>
+        /// A span rather than a byte[], so a caller that already holds the bytes
+        /// inside a larger buffer does not have to copy them out to be checksummed.
+        /// Every existing byte[] call site converts implicitly and sums exactly
+        /// the same bytes in the same order.
+        /// </summary>
+        internal void CalculateAndSetImageChecksum(ReadOnlySpan<byte> bytes)
+        {
+            this.checksum = 0;
+            foreach (byte b in bytes)
+            {
+                this.checksum += b;
+            }
+        }
+
+        /// <summary>
+        /// Parses the image from the wz filetod
+        /// </summary>
+        /// <param name="wzReader">The BinaryReader that is currently reading the wz file</param>
+        /// <returns>bool Parse status</returns>
+        public bool ParseImage(bool forceReadFromData = false)
+        {
+            if (!forceReadFromData)
+            { // only check if parsed or changed if its not false read
+                if (Parsed)
+                {
+                    return true;
+                }
+                else if (Changed)
+                {
+                    Parsed = true;
+                    return true;
+                }
+            }
+            
+            lock (reader) // for multi threaded XMLWZ export. 
+            {
+                //long originalPos = reader.BaseStream.Position;
+                reader.BaseStream.Position = offset;
+
+                byte b = reader.ReadByte();
+                switch (b)
+                {
+                    case 0x1: // .lua   
+                        {
+                            if (IsLuaWzImage)
+                            {
+                                WzLuaProperty lua = WzImageProperty.ParseLuaProperty(offset, reader, this, this);
+                                properties.Add(lua);
+                                parsed = true; // test
+                                return true;
+                            }
+                            return false; // unhandled for now, if it isnt an .lua image
+                        }
+                    case WzImageHeaderByte_WithoutOffset:
+                        {
+                            string prop = reader.ReadString();
+                            ushort val = reader.ReadUInt16();
+                            if (prop != "Property" || val != 0)
+                            {
+                                return false;
+                            }
+                            break;
+                        }
+                    default:
+                        {
+                            // todo: log this or warn.
+                            string error = "[WzImage] New Wz image header found. b = " + b;
+
+                            Helpers.ErrorLogger.Log(Helpers.ErrorLevel.MissingFeature, error);
+                            Debug.WriteLine(error);
+                            return false;
+                        }
+                }
+                List<WzImageProperty> images = WzImageProperty.ParsePropertyList(offset, reader, this, this);
+                properties.AddRange(images);
+
+                parsed = true;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Marks this WzImage as parsed to avoid loading from file once again
+        /// This function will be used exclusively for creating new Data.wz file for now :) 
+        /// </summary>
+        public void MarkWzImageAsParsed()
+        {
+            Parsed = true;
+        }
+
+        public byte[] DataBlock
+        {
+            get
+            {
+                byte[] blockData = null;
+                if (reader != null && size > 0)
+                {
+                    blockData = reader.ReadBytes(size);
+                    reader.BaseStream.Position = blockStart;
+                }
+                return blockData;
+            }
+        }
+
+        public void UnparseImage()
+        {
+            parsed = false;
+            this.properties.Clear();
+            this.properties = new WzPropertyCollection(this);
+        }
+
+        /// <summary>
+        /// Writes the WzImage object to the underlying WzBinaryWriter
+        /// </summary>
+        /// <param name="writer"></param>
+        /// <param name="bIsWzUserKeyDefault">Uses the default MapleStory UserKey or a custom key.</param>
+        /// <param name="forceReadFromData">Read from data regardless of base data that's changed or not.</param>
+        public void SaveImage(WzBinaryWriter writer, bool bIsWzUserKeyDefault = true, bool forceReadFromData = false)
+        {
+            if (bIsImageChanged || !bIsWzUserKeyDefault || forceReadFromData)
+            {
+                if (reader != null && !parsed)
+                {
+                    this.ParseEverything = true;
+
+                    // The parse result is not optional, and the read is forced.
+                    //
+                    // Two ways this used to lose an entire image with no error
+                    // anywhere:
+                    //
+                    // 1. ParseImage returns false -- without throwing -- for a
+                    //    non-.lua image carrying a 0x01 header and for any header
+                    //    byte it does not recognise, leaving `properties` empty.
+                    //    The bool was discarded here, so the image was serialised
+                    //    as an empty WzSubProperty. It stayed in the archive
+                    //    inventory with zero children, so a save-time inventory
+                    //    comparison matched and the contents were simply gone.
+                    //
+                    // 2. ParseImage short-circuits to `return true` when Changed is
+                    //    set, without reading a byte. Any caller that flags an
+                    //    unparsed image dirty -- MapleBench's
+                    //    WzNodeFactory.MarkChanged does exactly that when the parse
+                    //    it attempts first comes back false -- therefore arrived
+                    //    here with Changed set, parsed false and no properties, and
+                    //    got the same empty image.
+                    //
+                    // A genuinely empty image is legal and is not affected: it
+                    // carries a valid 0x73 "Property" header, parses to true, and
+                    // writes out as an empty WzSubProperty as it always did. The
+                    // return value is the correct discriminator between the two.
+                    //
+                    // The force is scoped to the case where there is nothing in
+                    // memory to lose: with no properties held, a forced read either
+                    // recovers the image's real contents or fails loudly, and when
+                    // Changed is clear it is what ParseImage would have done
+                    // anyway. Single-threaded behaviour for every other caller is
+                    // unchanged.
+                    bool forceRead = forceReadFromData || properties.Count == 0;
+                    if (!ParseImage(forceRead))
+                    {
+                        throw new InvalidDataException(
+                            $"The image '{FullPath ?? Name}' could not be parsed, so it cannot be " +
+                            "written out. Serialising it anyway would replace its contents with an " +
+                            "empty image and the original data would be lost.");
+                    }
+                }
+
+                WzSubProperty imgProp = new WzSubProperty();
+
+                long startPos = writer.BaseStream.Position;
+
+                imgProp.AddPropertiesForWzImageDumping(WzProperties);
+                imgProp.WriteValue(writer);
+
+                writer.StringCache.Clear();
+
+                size = (int)(writer.BaseStream.Position - startPos);
+            }
+            else
+            {
+                long pos = reader.BaseStream.Position;
+                reader.BaseStream.Position = offset;
+                writer.Write(reader.ReadBytes((int)size));
+
+                reader.BaseStream.Position = pos; // reset
+            }
+        }
+
+        public void ExportXml(StreamWriter writer, bool oneFile, int level)
+        {
+            if (oneFile)
+            {
+                writer.WriteLine(XmlUtil.Indentation(level) + XmlUtil.OpenNamedTag("WzImage", this.name, true));
+                WzImageProperty.DumpPropertyList(writer, level, WzProperties);
+                writer.WriteLine(XmlUtil.Indentation(level) + XmlUtil.CloseTag("WzImage"));
+            }
+            else
+            {
+                throw new Exception("Under Construction");
+            }
+        }
+        #endregion
+
+        #region Overrides
+        public override string ToString()
+        {
+            string loggerSuffix = string.Format("WzImage: '{0}' {1}", Name,
+                ((WzFileParent != null) ? (", ver. " + Enum.GetName(typeof(WzMapleVersion), WzFileParent.MapleVersion) + ", v" + WzFileParent.Version.ToString()) : ""));
+
+            return loggerSuffix;
+        }
+        #endregion
+    }
+}

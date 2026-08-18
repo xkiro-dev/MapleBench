@@ -1,0 +1,73 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Library</OutputType>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+
+    <!-- WinForms stays: WzSettings and the canvas path use System.Drawing, and
+         MapleBench's own shell is a Form. WPF does NOT — see below. -->
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <!-- UseWPF is deliberately absent.
+         It used to be on, and cost 32 MB across 18 assemblies
+         (PresentationFramework 15.8 MB, PresentationCore 8.3 MB, WindowsBase,
+         System.Xaml, wpfgfx_cor3, PresentationNative_cor3, the five theme
+         assemblies...) in every build and every publish. The only thing that
+         needed it was two methods on Converters/ImageConverter (ToWpfBitmap
+         and ToWinFormsBitmap) which nothing in this repo ever called, plus
+         four `using System.Windows*;` lines that referenced no type from those
+         namespaces. All of that is gone. Do not add UseWPF back to reach for a
+         type; MapleBench renders through System.Drawing and serves PNG bytes to
+         a WebView2, and has no WPF surface to render into. -->
+
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <Nullable>annotations</Nullable>
+
+    <!-- PublishAot is deliberately absent too.
+         On a *library* it never produced native code; it only turned on the
+         AOT analyzers and advertised a readiness this app does not have.
+         NativeAOT cannot build MapleBench at all: WinForms is unsupported under
+         AOT and MapleBench's desktop shell IS a Form. Leaving the flag on a
+         library that can never be AOT-published is a claim the build cannot
+         honour. OptimizationPreference/Ilc* went with it; they are ILCompiler
+         settings and do nothing without PublishAot. -->
+
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <AssemblyTitle>MapleLib</AssemblyTitle>
+    <Description>A general-purpose MapleStory library</Description>
+    <Product>MapleLib</Product>
+    <Copyright>Copyright © 2009, 2010, 2015 Snow and haha01haha01</Copyright>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <Optimize>False</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="lz4net" Version="1.0.15.93" />
+    <PackageReference Include="MonoGame.Framework.WindowsDX" Version="3.8.4.1" />
+    <PackageReference Include="NAudio" Version="2.3.0" />
+    <PackageReference Include="NAudio.Asio" Version="2.3.0" />
+    <PackageReference Include="NAudio.Core" Version="2.3.0" />
+    <PackageReference Include="NAudio.Midi" Version="2.3.0" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
+    <PackageReference Include="NAudio.WinForms" Version="2.3.0" />
+    <PackageReference Include="NAudio.WinMM" Version="2.3.0" />
+    <PackageReference Include="Newtonsoft.Json.Bson" Version="1.0.3" />
+    <PackageReference Include="SharpDX" Version="4.2.0" />
+    <PackageReference Include="SharpDX.Direct2D1" Version="4.2.0" />
+    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
+    <PackageReference Include="SharpDX.Direct3D9" Version="4.2.0" />
+    <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
+    <PackageReference Include="SharpDX.Mathematics" Version="4.2.0" />
+    <PackageReference Include="SharpDX.MediaFoundation" Version="4.2.0" />
+    <PackageReference Include="SharpDX.XAudio2" Version="4.2.0" />
+    <PackageReference Include="SharpDX.XInput" Version="4.2.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="WzLib\WzProperties\WzListEntry.cs" />
+  </ItemGroup>
+</Project>

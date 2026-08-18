@@ -1,0 +1,345 @@
+/* ============================================================
+   Mobs mode.
+
+   Deliberately built from the same parts as Cash Shop mode: the stat tiles
+   (.stat-chip), the filter pills (.cat-tab) and the pager (.pager) are reused
+   from cashshop.css rather than re-cut here, so the two modes cannot drift
+   apart visually. Everything below is either genuinely new (the field editor,
+   the bulk preview) or a mob-named twin of a shop panel where the class name
+   would otherwise read as a lie.
+   ============================================================ */
+
+/* The workspace layout rule for this mode ships with the mode rather than
+   living beside the cashshop one in app.css: adding a mode should mean adding
+   two files, not editing the shell's stylesheet. Same shape as cashshop --
+   the tree and the inspector have nothing to say about a mob grid. */
+.workspace[data-mode="mobs"] { grid-template-columns: var(--rail-w) minmax(0, 1fr); }
+.workspace[data-mode="mobs"] .side-panel,
+.workspace[data-mode="mobs"] .inspector { display: none; }
+
+/* The breadcrumb belongs to the Explorer's selection, and App.clearStageChrome
+   now empties it on the way out of Explorer -- which left a blank 46px strip
+   with a border above every other mode. Written once for all of them rather
+   than per mode, so a fourth mode cannot forget it. */
+.workspace:not([data-mode="explorer"]) .breadcrumb { display: none; }
+
+.mobs {
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: auto;
+  padding: var(--sp-4) var(--sp-6) var(--sp-8);
+  gap: var(--sp-4);
+}
+
+.mob-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--sp-4);
+}
+
+.mob-empty-actions { display: flex; gap: var(--sp-2); }
+
+/* --- header --- */
+.mob-head { display: flex; align-items: center; gap: var(--sp-3); }
+.mob-head-text { flex: 1; min-width: 0; }
+.mob-head-title { font-size: var(--fs-18); font-weight: 700; letter-spacing: var(--ls-tight); }
+.mob-head-sub { font-size: var(--fs-12); color: var(--text-3); }
+.mob-head-sub b { color: var(--text-2); }
+
+.mob-select {
+  height: 34px; padding: 0 var(--sp-2);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+  font-size: var(--fs-13); cursor: pointer;
+}
+.mob-select:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+
+/* --- toolbar --- */
+.mob-toolbar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.mob-search { position: relative; flex: 1 1 240px; min-width: 190px; }
+.mob-search input {
+  width: 100%; height: 38px; padding: 0 var(--sp-3) 0 var(--sp-8);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+}
+.mob-search input:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+.mob-search .icon {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3);
+}
+
+/* Tone and shape come from .notice in app.css; only the spacing to the toolbar
+   above it belongs to this screen. */
+.mobs .notice { margin-top: var(--sp-3); }
+
+/* --- selection bar --- */
+.mob-selbar {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+.mob-selcount { font-size: var(--fs-13); color: var(--text-3); margin-right: auto; }
+.mob-selbar[data-active="true"] .mob-selcount { color: var(--coral-ink); font-weight: 700; }
+
+.mob-result-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: var(--fs-13); color: var(--text-2); margin-bottom: var(--sp-3);
+}
+
+/* ============================================================
+   CARD GRID
+   ============================================================ */
+.mob-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--sp-4);
+}
+
+.mob-card {
+  /* align-self:start, so a card is exactly as tall as what is on it.
+     Stretched to the row, a card with no Elements line and no MP line carried
+     seventy pixels of empty white below its last stat -- a hole inside a
+     bordered box, which reads as content that failed to load rather than as
+     content that is not there. The gap belongs between the cards. */
+  align-self: start;
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: none;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
+}
+.mob-card:hover { border-color: var(--border-strong); }
+.mob-card[data-selected="true"] { border-color: var(--coral-fill); box-shadow: var(--sh-focus); }
+
+.mob-card-head { display: flex; align-items: flex-start; gap: var(--sp-2); }
+.mob-card-title { flex: 1; min-width: 0; }
+.mob-pick { flex: none; display: grid; place-items: center; padding-top: 2px; }
+.mob-pick input { width: 17px; height: 17px; accent-color: var(--coral-fill); cursor: pointer; }
+
+.mob-title {
+  font-size: var(--fs-14); font-weight: 700; line-height: 1.25;
+  color: var(--text-1); text-align: left; word-break: break-word;
+}
+.mob-title:hover { color: var(--coral-ink); }
+.mob-sub { font-size: var(--fs-11); color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+.mob-level {
+  flex: none;
+  background: var(--blue-tint); color: var(--blue-ink);
+  font-size: var(--fs-11); font-weight: 700;
+  padding: 3px 9px; border-radius: var(--r-pill);
+  font-variant-numeric: tabular-nums;
+}
+
+.mob-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.mob-badge {
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; padding: 3px 8px; border-radius: var(--r-pill);
+  background: var(--bg-sunken); color: var(--text-3);
+}
+.mob-badge[data-kind="boss"]   { background: var(--purple-tint); color: var(--purple-ink); }
+.mob-badge[data-kind="undead"] { background: var(--green-tint);  color: var(--green-ink); }
+.mob-badge[data-kind="link"]   { background: var(--amber-tint);  color: var(--amber-ink); }
+.mob-badge[data-kind="dirty"]  { background: var(--coral-tint);  color: var(--coral-ink); }
+
+.mob-row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-field);
+  border-radius: var(--r-md);
+  font-size: var(--fs-13);
+}
+.mob-row .k { color: var(--text-3); }
+.mob-row .v { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Zero controls at rest, same as a shop card: the stats are the content. */
+.mob-actions { display: flex; gap: var(--sp-2); margin-top: auto; padding-top: var(--sp-2); }
+.mob-actions .btn { justify-content: center; }
+.mob-card .mob-actions { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.mob-card:hover .mob-actions,
+.mob-card:focus-within .mob-actions { opacity: 1; }
+
+/* ============================================================
+   MOB CARD DIALOG
+   ============================================================ */
+.mob-detail { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.mob-detail-head {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.mob-detail-name { font-size: var(--fs-16); font-weight: 700; }
+
+.mob-link-strip {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--amber-tint); color: var(--amber-ink);
+  border: 1px solid color-mix(in srgb, var(--amber-ink) 30%, transparent);
+  border-radius: var(--r-md);
+}
+.mob-link-text { flex: 1; font-size: var(--fs-12); line-height: 1.5; }
+
+.mob-detail-topline { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+/* Sticky inside .modal-body, which is the scroller: a mob has dozens of fields,
+   and a field search that scrolls out of reach is a field search nobody uses. */
+.mob-detail-tools {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  padding: var(--sp-2) 0;
+  background: var(--bg-raised);
+}
+.mob-modcount { font-size: var(--fs-12); color: var(--text-3); margin-left: auto; }
+.mob-modcount[data-active="true"] { color: var(--coral-ink); font-weight: 600; }
+
+.mob-sections { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.mob-section {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.mob-section > summary {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-3);
+  cursor: pointer; list-style: none;
+  font-size: var(--fs-13);
+}
+.mob-section > summary::-webkit-details-marker { display: none; }
+.mob-section > summary::before {
+  content: ""; flex: none;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  color: var(--text-3);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.mob-section[open] > summary::before { transform: rotate(90deg); }
+.mob-section > summary:hover { background: var(--bg-hover); }
+
+.mob-section-name { font-weight: 700; color: var(--text-1); }
+.mob-section-meta { color: var(--text-3); font-size: var(--fs-12); }
+.mob-section-mod {
+  margin-left: auto;
+  background: var(--coral-tint); color: var(--coral-ink);
+  font-size: var(--fs-11); font-weight: 700;
+  padding: 2px 8px; border-radius: var(--r-pill);
+}
+
+.mob-field-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--sp-3);
+  padding: 0 var(--sp-3) var(--sp-3);
+}
+
+.mob-field { display: flex; flex-direction: column; gap: 5px; }
+.mob-field-label { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.mob-field-name { font-size: var(--fs-11); font-weight: 700; color: var(--text-2); }
+.mob-unit { font-size: var(--fs-10); color: var(--text-3); }
+.mob-was {
+  font-size: var(--fs-10); font-weight: 700;
+  background: var(--amber-tint); color: var(--amber-ink);
+  padding: 1px 6px; border-radius: var(--r-pill);
+  font-variant-numeric: tabular-nums;
+}
+.mob-absent-tag {
+  font-size: var(--fs-10); font-weight: 700;
+  background: var(--bg-sunken); color: var(--text-3);
+  padding: 1px 6px; border-radius: var(--r-pill);
+}
+.mob-field[data-changed="true"] .mob-field-name { color: var(--coral-ink); }
+.mob-field[data-absent="true"] .mob-input { border-style: dashed; }
+
+.mob-input {
+  width: 100%; height: 32px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+  font-size: var(--fs-13); font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.mob-input:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+.mob-input[data-invalid="true"] { border-color: var(--red-fill); background: var(--red-tint); }
+.mob-field[data-changed="true"] .mob-input { border-color: var(--coral-fill); }
+
+.mob-check { display: flex; align-items: center; gap: 8px; height: 32px; font-size: var(--fs-13); cursor: pointer; }
+.mob-check input { width: 17px; height: 17px; accent-color: var(--coral-fill); cursor: pointer; }
+
+.mob-field-hint { font-size: var(--fs-10); color: var(--text-3); line-height: 1.45; }
+
+.mob-extra { margin: 0; padding: 0 var(--sp-3) var(--sp-3); display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; }
+.mob-extra dt { font-size: var(--fs-11); font-weight: 700; color: var(--text-3); }
+.mob-extra dd { margin: 0; font-size: var(--fs-12); font-family: var(--font-mono); word-break: break-all; }
+
+/* ============================================================
+   BULK EDIT
+   ============================================================ */
+.mob-bulk { display: flex; flex-direction: column; gap: var(--sp-4); }
+.mob-bulk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sp-3); }
+.mob-bulk-field { display: flex; flex-direction: column; gap: 5px; }
+.mob-bulk-field label { font-size: var(--fs-11); font-weight: 700; color: var(--text-2); }
+.mob-bulk-field .mob-select, .mob-bulk-field .mob-input { width: 100%; }
+.mob-bulk-actions { display: flex; gap: var(--sp-2); }
+
+.mob-preview-host { min-height: 64px; }
+.mob-preview-empty {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-field); border-radius: var(--r-md);
+  font-size: var(--fs-12); color: var(--text-3); line-height: 1.5;
+}
+.mob-preview-empty[data-tone="bad"] { background: var(--red-tint); color: var(--red-ink); }
+
+.mob-preview-head {
+  display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap;
+  font-size: var(--fs-13); font-weight: 600; margin-bottom: var(--sp-2);
+}
+.mob-preview-trunc { font-size: var(--fs-11); font-weight: 500; color: var(--amber-ink); }
+
+.mob-preview-scroll { max-height: 42vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+.mob-preview { width: 100%; border-collapse: collapse; font-size: var(--fs-12); }
+.mob-preview th {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  text-align: left; padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--text-3);
+  background: var(--bg-raised); border-bottom: 1px solid var(--border);
+}
+.mob-preview td {
+  padding: 5px var(--sp-3); border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.mob-preview td.num { font-variant-numeric: tabular-nums; font-weight: 600; }
+.mob-preview-name { font-weight: 600; color: var(--text-1); }
+.mob-preview-arrow { color: var(--text-3); text-align: center; width: 24px; }
+.mob-preview-note { color: var(--amber-ink); font-size: var(--fs-11); }
+/* A skipped row still shows its current value -- greying the whole row to
+   invisibility would hide the number that explains why it was skipped. */
+.mob-preview tr[data-skipped="true"] td { background: var(--bg-sunken); color: var(--text-3); }
+.mob-preview tr[data-skipped="true"] .mob-preview-name { color: var(--text-3); }
+
+/* ---- Card sprite -------------------------------------------------------
+   The mob's own art from the open archive. Fixed 32px box so a card's height
+   never depends on whether its sprite loaded -- an unloaded row that is
+   shorter than its neighbours makes the grid jump as images arrive. */
+.mob-sprite {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  color: var(--text-3);
+  overflow: hidden;
+}
+
+.mob-sprite-img {
+  max-width: 32px;
+  max-height: 32px;
+  /* These are small pixel sprites; smoothing turns them to mush. */
+  image-rendering: pixelated;
+}

@@ -1,0 +1,342 @@
+/* ============================================================
+   The Strings section.
+
+   Same shape as cashshop.css, mob.css and database.css -- panels, stat chips,
+   filter pills, the pager, .tips and .field-hint are reused from those rather
+   than restated here. What is new is the edit table: a grid of live inputs
+   rather than a grid of cards, because the work on this screen is typing names
+   into ids and reading back what the server did with them.
+   ============================================================ */
+
+.strings {
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: auto;
+  padding: var(--sp-4) var(--sp-6) var(--sp-8);
+  gap: var(--sp-4);
+}
+
+.str-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--sp-4);
+}
+
+.str-head { display: flex; align-items: center; gap: var(--sp-3); }
+.str-head-text { flex: 1; min-width: 0; }
+.str-head-title { font-size: var(--fs-18); font-weight: 700; letter-spacing: var(--ls-tight); }
+.str-head-sub { font-size: var(--fs-12); color: var(--text-3); margin-top: 2px; }
+.str-head-sub b { color: var(--text-2); }
+
+
+.str-empty-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; justify-content: center; }
+
+/* ============================================================
+   TOOLBAR
+   ============================================================ */
+
+.str-toolbar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.str-search { position: relative; flex: 1 1 300px; min-width: 200px; }
+.str-search input {
+  width: 100%; height: 38px; padding: 0 var(--sp-3) 0 var(--sp-8);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+}
+.str-search input:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+.str-search .icon {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3);
+}
+
+.str-note-bar {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--amber-tint); color: var(--amber-ink);
+  font-size: var(--fs-12); line-height: 1.5;
+}
+
+/* Rule 12's disclosure: present and readable, but folded away, because it is
+   the answer to a question you only ask once. */
+.str-limits { margin-top: var(--sp-3); font-size: var(--fs-12); color: var(--text-3); }
+.str-limits > summary {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; color: var(--text-2); font-weight: 600;
+  list-style: none;
+}
+.str-limits > summary::-webkit-details-marker { display: none; }
+.str-limits > summary:hover { color: var(--text-1); }
+.str-limits ul { margin: var(--sp-2) 0 0; padding-left: 22px; line-height: 1.55; }
+.str-limits li { margin: 3px 0; }
+.str-limits-foot { margin-top: var(--sp-2); padding-left: 22px; }
+
+.str-result-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: var(--fs-13); color: var(--text-2); margin-bottom: var(--sp-3);
+}
+
+/* ============================================================
+   THE MISSING-ENTRY BANNER
+
+   The one thing this section exists for. Coral rather than amber: it is not a
+   warning about something going wrong, it is the answer to "why is my item
+   nameless", with the fix attached.
+   ============================================================ */
+
+.str-missing {
+  display: flex; align-items: center; gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--coral-fill);
+  border-radius: var(--r-lg);
+  background: var(--coral-tint);
+  font-size: var(--fs-13); line-height: 1.5;
+}
+.str-missing-glyph { flex: none; color: var(--coral-ink); display: grid; place-items: center; }
+.str-missing-text { flex: 1; min-width: 0; color: var(--text-2); }
+.str-missing-text b { color: var(--coral-ink); }
+.str-missing .btn { flex: none; }
+
+@media (max-width: 720px) {
+  .str-missing { flex-direction: column; align-items: flex-start; }
+}
+
+/* ============================================================
+   THE EDIT TABLE
+   ============================================================ */
+
+.str-table-scroll { overflow-x: auto; }
+
+.str-table { width: 100%; border-collapse: collapse; }
+.str-table th {
+  text-align: left; padding: 8px 10px;
+  font-size: var(--fs-11); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.str-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+.str-table tr:last-child td { border-bottom: none; }
+.str-table tr:hover td { background: var(--bg-hover); }
+
+.str-col-icon { width: 1%; padding-top: 7px; padding-right: 0; }
+.str-col-id { width: 1%; white-space: nowrap; padding-top: 11px; }
+.str-col-where { width: 1%; white-space: nowrap; padding-top: 10px; }
+.str-col-act { width: 1%; padding-top: 9px; }
+
+.str-idbtn {
+  font-family: var(--font-mono); font-size: var(--fs-12);
+  font-variant-numeric: tabular-nums;
+  padding: 3px 7px; border-radius: var(--r-sm);
+  border: 1px solid transparent; background: var(--bg-sunken); color: var(--text-2);
+}
+.str-idbtn:hover { background: var(--bg-active); color: var(--text-1); }
+.str-idbtn:focus-visible { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+
+/* ============================================================
+   ROW ART
+
+   The box is a fixed --thumb square whatever happens inside it: the icon may
+   arrive late (lazy), may 404, or may not exist for this kind at all, and a row
+   that resized on any of those would make the list jump under the cursor while
+   it was being read.
+   ============================================================ */
+
+.str-thumb {
+  position: relative;
+  display: grid; place-items: center; flex: none;
+  width: var(--thumb, 34px); height: var(--thumb, 34px);
+  border-radius: var(--r-sm); overflow: hidden;
+  background: var(--bg-sunken);
+}
+
+/* The checkerboard only goes behind real art, where transparency is a fact
+   about the sprite. Behind a glyph it would read as "this image failed to
+   load", which is the opposite of what the glyph is there to say. */
+.str-thumb[data-art="true"] {
+  background-color: var(--checker-a);
+  background-image:
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-b) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+}
+
+/* The image sits over the glyph rather than replacing it, so an icon that is
+   still in flight shows the kind glyph instead of an empty hole. Until it has
+   loaded it has no intrinsic size and takes no space; once it does, the script
+   removes the glyph underneath it. */
+.str-thumb img {
+  position: relative; z-index: 1;
+  image-rendering: pixelated; display: block;
+  /* A size before it has one of its own. An image that has not loaded has no
+     intrinsic dimensions, and Chrome will not start fetching a `loading="lazy"`
+     image whose box is 0x0 -- it never intersects anything, so it never comes
+     into view and never loads. Filling the thumb gives it a box to be seen in;
+     scalePixelArt replaces both with inline pixel values the moment it loads. */
+  width: 100%; height: 100%;
+}
+.str-thumb-glyph {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  color: var(--text-3); opacity: 0.7;
+}
+
+.str-where-img {
+  display: block; font-size: var(--fs-11); color: var(--text-2);
+  font-family: var(--font-mono);
+}
+.str-where-group { display: block; font-size: var(--fs-10); color: var(--text-3); margin-top: 2px; }
+
+.str-cell { display: flex; flex-direction: column; gap: 3px; min-width: 160px; }
+
+.str-input {
+  width: 100%; height: 32px; padding: 0 9px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--bg-field); color: var(--text-1);
+  font-size: var(--fs-12); font-family: inherit;
+}
+.str-input:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+.str-input[aria-busy="true"] { opacity: 0.6; cursor: progress; }
+
+/* A field the entry does not carry. Dashed, so it does not read as an empty
+   value that someone deleted -- the placeholder says the rest. */
+.str-input[data-unset="true"] { border-style: dashed; border-color: var(--border-strong); background: transparent; }
+.str-input::placeholder { color: var(--text-3); font-style: italic; }
+
+.str-area { height: auto; min-height: 68px; padding: 7px 9px; line-height: 1.5; resize: vertical; }
+
+.str-note { font-size: var(--fs-10); color: var(--text-3); line-height: 1.4; }
+.str-note[data-tone="good"] { color: var(--green-ink); }
+.str-note[data-tone="warn"] { color: var(--amber-ink); }
+.str-note[data-tone="bad"] { color: var(--red-ink); }
+
+/* ============================================================
+   THE WRITE AND BULK DIALOGS
+   ============================================================ */
+
+.str-write, .str-bulk { display: flex; flex-direction: column; gap: var(--sp-4); }
+
+.str-field { display: flex; flex-direction: column; gap: 5px; }
+.str-field > label { font-size: var(--fs-11); font-weight: 700; color: var(--text-2); }
+/* Spelled out, because the UA rule for [hidden] is one class worth of
+   specificity and loses to `.str-field { display: flex }` in an author
+   stylesheet -- which left the category picker on screen, empty, for an id that
+   already has an entry and needs no category at all. database.css carries the
+   same note for the section stages. */
+.str-field[hidden] { display: none; }
+
+.str-select {
+  height: 34px; padding: 0 var(--sp-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--bg-field); color: var(--text-1);
+  font-size: var(--fs-12);
+}
+.str-select:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+
+.str-paste {
+  width: 100%; padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+  font-family: var(--font-mono); font-size: var(--fs-12); line-height: 1.6;
+  resize: vertical;
+}
+.str-paste:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+
+.str-parsed {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  font-size: var(--fs-12); color: var(--text-2);
+}
+.str-parsed-idle { color: var(--text-3); }
+.str-parsed-bad { display: flex; align-items: center; gap: 5px; color: var(--amber-ink); }
+
+/* The state of the id in the write dialog: unknown, already named, or nameless.
+   Three different facts, three different colours, each with a glyph so colour
+   is never the only cue. */
+/* The id's own art sits beside the sentence about it, so the two are read as
+   one answer to "what is 1302999?". */
+.str-status { display: flex; align-items: center; gap: var(--sp-3); }
+.str-status > .str-status-line { flex: 1; min-width: 0; }
+
+.str-status-line {
+  display: flex; align-items: flex-start; gap: 7px;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  font-size: var(--fs-12); line-height: 1.5;
+  background: var(--bg-sunken); color: var(--text-3);
+}
+.str-status-line[data-tone="known"] { background: var(--blue-tint); color: var(--blue-ink); }
+.str-status-line[data-tone="new"] { background: var(--coral-tint); color: var(--coral-ink); }
+.str-status-line[data-tone="bad"] { background: var(--red-tint); color: var(--red-ink); }
+
+.str-write-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+
+/* ============================================================
+   PREVIEW
+   ============================================================ */
+
+.str-preview-host { min-height: 64px; }
+
+.str-preview-empty {
+  display: flex; align-items: center; gap: 8px;
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--bg-sunken); color: var(--text-3);
+  font-size: var(--fs-12); line-height: 1.5;
+}
+.str-preview-empty[data-tone="bad"] { background: var(--red-tint); color: var(--red-ink); }
+
+.str-preview-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  font-size: var(--fs-13); font-weight: 600; color: var(--text-1);
+  margin-bottom: var(--sp-2);
+}
+.str-preview-sub { font-size: var(--fs-11); font-weight: 500; color: var(--text-3); }
+
+.str-preview-scroll {
+  max-height: 42vh; overflow: auto;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+}
+.str-preview { width: 100%; border-collapse: collapse; font-size: var(--fs-12); }
+.str-preview th {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  text-align: left; padding: 7px 10px;
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--text-3);
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--border);
+}
+.str-preview td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+.str-preview tr:last-child td { border-bottom: none; }
+
+.str-preview-id { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.str-preview-arrow { color: var(--text-3); text-align: center; width: 24px; }
+.str-preview-field {
+  display: block; font-size: var(--fs-10); color: var(--text-3);
+  text-transform: uppercase; letter-spacing: var(--ls-caps); font-weight: 700;
+}
+.str-preview-text { display: block; color: var(--text-1); overflow-wrap: anywhere; }
+/* "not set" is a different claim from an empty string, and the table has to be
+   able to say both without either looking like the other. */
+.str-preview-text[data-empty="true"] { color: var(--text-3); font-style: italic; }
+.str-preview-note { color: var(--amber-ink); font-size: var(--fs-11); line-height: 1.45; }
+
+.str-preview tr[data-skipped="true"] td { background: var(--bg-sunken); color: var(--text-3); }
+.str-preview tr[data-skipped="true"] .str-preview-text { color: var(--text-3); }
+
+.str-tag {
+  display: inline-block; margin-top: 3px;
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; padding: 2px 7px; border-radius: var(--r-pill);
+  background: var(--bg-sunken); color: var(--text-3);
+}
+.str-tag[data-kind="new"] { background: var(--green-tint); color: var(--green-ink); }

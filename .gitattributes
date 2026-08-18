@@ -1,0 +1,34 @@
+# Line endings are decided here, once, rather than by whichever tool last
+# wrote a file.
+#
+# This exists because it already went wrong. A scripted edit rewrote four
+# source files from LF to CRLF, and because git had no opinion, the whole of
+# each file landed in a commit as changed -- 4,842 lines of churn across
+# mob.js, skill.js, mob.css and strings.css for edits that touched a handful.
+# A diff that large is not reviewable, so a real mistake inside one would have
+# gone through unseen. That is the cost being avoided: not tidiness, but the
+# ability to read a change before it ships.
+#
+# `text=auto` lets git decide what is text; `eol=lf` normalises those in the
+# repository. Working copies on Windows still check out however core.autocrlf
+# says, so nothing about editing here changes.
+* text=auto eol=lf
+
+# Binary, and must never be touched: WZ archives, sprites, audio, icons and
+# the test fixtures. A newline "fix" inside any of these corrupts it silently,
+# which is the exact failure mode this project spends most of its guards on.
+*.wz      binary
+*.ms      binary
+*.img     binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.mp3     binary
+*.wav     binary
+*.dll     binary
+*.exe     binary
+*.pdb     binary
+*.zip     binary
+*.snk     binary

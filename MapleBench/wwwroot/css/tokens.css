@@ -1,0 +1,357 @@
+/* ============================================================
+   MapleBench design tokens.
+
+   Contrast ratios in the comments were computed against sRGB
+   relative luminance. The brand coral (#FF6B6B) is only 2.78:1
+   against white, so it is used for tints, glows and the logo,
+   never as a fill behind white text -- --coral-fill exists for
+   that and clears WCAG AA.
+   ============================================================ */
+
+:root {
+  /* ---------- RADII ---------- */
+  --r-xs: 3px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-xl: 10px;
+  --r-2xl: 12px;
+  --r-pill: 999px;
+
+  /* ---------- SPACING (4px base) ---------- */
+  --sp-1: 4px;   --sp-2: 8px;   --sp-3: 12px;  --sp-4: 16px;
+  --sp-5: 20px;  --sp-6: 24px;  --sp-8: 32px;  --sp-10: 40px;
+  --sp-12: 48px; --sp-16: 64px;
+
+  /* ---------- TYPE ---------- */
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui,
+               -apple-system, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, ui-monospace, monospace;
+
+  --fs-10: 0.625rem;   --fs-11: 0.6875rem; --fs-12: 0.75rem;
+  --fs-13: 0.8125rem;  --fs-14: 0.875rem;  --fs-16: 1rem;
+  --fs-18: 1.125rem;   --fs-22: 1.375rem;
+
+  --ls-tight: -0.011em;
+  --ls-caps: 0.045em;
+  --tnum: "tnum" 1, "zero" 1;
+
+  /* ---------- MOTION ---------- */
+  --dur-instant: 80ms;
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+  --dur-slow: 220ms;
+  --dur-slower: 300ms;
+  --dur-loop: 1200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* Symmetric, for loops: an asymmetric ease visibly stutters at the seam
+     where an infinite animation restarts. */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ---------- LAYOUT ---------- */
+  --row-h: 28px;          /* fixed: the virtualizer depends on it */
+  --topbar-h: 56px;
+  --statusbar-h: 28px;
+  --rail-w: 48px;
+
+  /* ---------- Z ---------- */
+  --z-sticky: 10;
+  --z-dropdown: 100;
+  --z-popover: 200;
+  --z-modal-backdrop: 900;
+  --z-modal: 1000;
+  --z-toast: 1100;
+  --z-tooltip: 1200;
+}
+
+/* ============================================================
+   LIGHT
+   ============================================================ */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-page: #f2f4f7;
+  --bg-surface: #ffffff;
+  --bg-raised: #ffffff;
+  --bg-sunken: #e9ecf1;
+  --bg-field: #f5f7fa;
+  --bg-hover: #eef1f5;
+  --bg-active: #e4e9f0;
+  --bg-selected: #ffe9e1;
+  --bg-overlay: rgb(12 22 34 / 0.44);
+
+  --border-subtle: #ebeef2;
+  --border: #e2e6ec;
+  --border-strong: #8792a0;   /* 3.16:1 on white - AA for UI */
+  --border-focus: #bd421c;    /* accent-ink: 5.30:1 on white - AA */
+
+  /* Ratios are quoted against white AND against the darkest surface the tone
+     actually lands on (--bg-active), because almost none of this text sits on
+     white: --text-3 carries the pane titles, tree values, table headers and
+     status bar, which live on --bg-field, --bg-hover, --bg-selected and
+     --bg-sunken. The old --text-3 (#67707c) measured 5.02 on white but 4.24
+     on --bg-sunken and 4.11 on --bg-active, i.e. it failed AA everywhere it
+     was really used. */
+  --text-1: #12161c;          /* 18.15:1 white, 14.87 on --bg-active - AAA */
+  --text-2: #4a5462;          /*  7.68:1 white,  6.29 on --bg-active - AA  */
+  --text-3: #576170;          /*  6.27:1 white,  5.14 on --bg-active - AA  */
+  --text-on-fill: #ffffff;
+
+  /* Accent -- maple vermilion, hue ~13deg.
+     Deliberately far from --red-*, which sits at ~349deg. The two used to be
+     1.2deg apart, which made "Save" and "Delete" the same colour at a glance. */
+  --coral: #ff5f33;           /* decorative chroma  - 3.03:1 on white, never behind text */
+  --coral-fill: #cf4520;      /* white on it        - 4.64:1  AA */
+  --coral-fill-h: #b8401b;    /* hover              - 5.54:1  AA */
+  --coral-ink: #bd421c;       /* accent as text     - 5.30:1 on white  AA */
+  --coral-tint: #fff0ea;      /* pale wash          - ink on it 4.77:1  AA */
+
+  --blue-fill: #2563eb;       /* white = 5.17:1 */
+  --blue-fill-h: #1d4ed8;
+  --blue-ink: #1d4ed8;
+  --blue-tint: #e6edfe;
+
+  /* Danger -- crimson, hue ~349deg. Must never be mistaken for the accent. */
+  --red-fill: #cf1f3c;        /* white on it - 5.36:1  AA  */
+  --red-fill-h: #b01733;      /* white on it - 6.96:1  AAA */
+  --red-ink: #b01733;         /* on white    - 6.96:1  AAA */
+  --red-tint: #fdeaee;        /* red-ink on it - 6.03:1  AA */
+
+  --green-fill: #15803d;      /* white = 5.02:1 */
+  --green-fill-h: #14672f;
+  --green-ink: #0f6b45;
+  --green-tint: #e3f5e7;
+
+  --purple-fill: #7c3aed;     /* white = 5.70:1 */
+  --purple-fill-h: #6d28d9;
+  --purple-ink: #6d28d9;
+  --purple-tint: #f1e9fe;
+
+  --amber-fill: #f59e0b;
+  --amber-on-fill: #3a2a06;   /* 6.46:1 on amber-fill */
+  --amber-ink: #8a5200;
+  --amber-tint: #fdf3e0;
+  --amber-dot: #b45309;
+  --badge-ink: #ffffff;       /* on --amber-dot - 5.02:1  AA */
+
+  --sh-xs: 0 1px 2px rgb(16 24 40 / 0.05);
+  --sh-sm: 0 1px 3px rgb(16 24 40 / 0.08), 0 1px 2px rgb(16 24 40 / 0.05);
+  --sh-md: 0 4px 8px -2px rgb(16 24 40 / 0.09), 0 2px 4px -2px rgb(16 24 40 / 0.05);
+  --sh-lg: 0 12px 20px -4px rgb(16 24 40 / 0.10), 0 4px 6px -2px rgb(16 24 40 / 0.04);
+  --sh-xl: 0 20px 28px -6px rgb(16 24 40 / 0.12), 0 8px 10px -6px rgb(16 24 40 / 0.05);
+  /* The focus ring, in two layers. The 1px band does the accessibility work
+     (--border-focus is 5.30:1 on white, 4.94 on --bg-field); the soft halo is
+     only 1.47:1 against white, so it is decoration and must never be the sole
+     cue. Two layers means the ring is self-sufficient on a borderless control
+     such as .palette-input. */
+  --sh-focus: 0 0 0 1px var(--border-focus), 0 0 0 4px rgb(189 66 28 / 0.26);
+
+  --checker-a: #ffffff;
+  --checker-b: #e7ebf0;
+
+  /* Tooltips invert against the page so they read as an overlay, not a panel. */
+  --tip-bg: #1b2129;
+  --tip-fg: #f4f6f9;
+  --sh-2xl: 0 28px 56px -12px rgb(16 24 40 / 0.24);
+}
+
+/* ============================================================
+   DARK
+   ============================================================ */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-page: #0c0e11;
+  --bg-surface: #15181d;
+  --bg-raised: #1c2027;
+  --bg-sunken: #0f1216;
+  --bg-field: #0f1216;
+  --bg-hover: #1e232a;
+  --bg-active: #262c35;
+  --bg-selected: #3a1d11;
+  --bg-overlay: rgb(0 0 0 / 0.62);
+
+  --border-subtle: #1f242b;
+  --border: #272c34;
+  --border-strong: #626c7a;
+  --border-focus: #ff9068;
+
+  --text-1: #e8ecf2;          /* 15.01:1 on --bg-surface, 11.85 on --bg-active - AAA */
+  --text-2: #a3aebc;          /*  7.91:1 on --bg-surface,  6.25 on --bg-active - AA  */
+  --text-3: #939dab;          /*  6.48:1 on --bg-surface,  5.12 on --bg-active - AA  */
+  --text-on-fill: #ffffff;
+
+  --coral: #ff7a52;           /* decorative      - 6.91:1 on --bg-surface */
+  --coral-fill: #c4431f;      /* white on it     - 5.04:1  AA */
+  --coral-fill-h: #c94520;    /* hover (lighter) - 4.82:1  AA */
+  --coral-ink: #ff9068;       /* accent as text  - 8.00:1  AAA */
+  --coral-tint: #3a1c11;
+
+  --blue-fill: #2563eb;
+  --blue-fill-h: #1d4ed8;
+  --blue-ink: #8ab4ff;
+  --blue-tint: #16223c;
+
+  --red-fill: #c81e3a;        /* white on it - 5.67:1  AA  */
+  --red-fill-h: #b81733;      /* white on it - 6.55:1  AAA */
+  --red-ink: #ff7f96;         /* on surface  - 7.39:1  AAA */
+  --red-tint: #3c1420;        /* red-ink on it - 6.65:1  AAA */
+
+  --green-fill: #15803d;
+  --green-fill-h: #14672f;
+  --green-ink: #5fd9a4;
+  --green-tint: #0b2c24;
+
+  --purple-fill: #7c3aed;
+  --purple-fill-h: #6d28d9;
+  --purple-ink: #c4a6ff;
+  --purple-tint: #251a44;
+
+  --amber-fill: #f59e0b;
+  --amber-on-fill: #3a2a06;
+  --amber-ink: #f5c06a;
+  --amber-tint: #33260d;
+  --amber-dot: #f5c06a;
+  --badge-ink: #1a1205;       /* on --amber-dot - 11.15:1  AAA.
+                                 White here is 1.66:1, and this dot carries the
+                                 count of unsaved files. */
+
+  --sh-xs: 0 1px 2px rgb(0 0 0 / 0.40);
+  --sh-sm: 0 1px 3px rgb(0 0 0 / 0.50), 0 1px 2px rgb(0 0 0 / 0.35);
+  --sh-md: 0 4px 8px -2px rgb(0 0 0 / 0.55), 0 2px 4px -2px rgb(0 0 0 / 0.40);
+  --sh-lg: 0 12px 20px -4px rgb(0 0 0 / 0.60), 0 4px 6px -2px rgb(0 0 0 / 0.40);
+  --sh-xl: 0 20px 28px -6px rgb(0 0 0 / 0.66), 0 8px 10px -6px rgb(0 0 0 / 0.42);
+  /* Same two layers as light: the 1px band is --border-focus at 8.44:1 on
+     --bg-field, the halo is 1.81:1 and decorative. */
+  --sh-focus: 0 0 0 1px var(--border-focus), 0 0 0 4px rgb(255 144 104 / 0.30);
+
+  --checker-a: #23272e;
+  --checker-b: #1a1e24;
+
+  --tip-bg: #2b323c;
+  --tip-fg: #f0f3f7;
+  --sh-2xl: 0 28px 56px -12px rgb(0 0 0 / 0.78);
+}
+
+/* ============================================================
+   WZ PROPERTY TYPE BADGES
+   Hue encodes the family; every ink/tint pair clears AA.
+   Never rely on colour alone -- the badge always carries text.
+   ============================================================ */
+:root,
+[data-theme="light"] {
+  --t-int-ink: #1d4ed8;      --t-int-bg: #e6edfe;
+  --t-short-ink: #0b6a94;    --t-short-bg: #e0f0f9;
+  --t-long-ink: #4338ca;     --t-long-bg: #e9e8fd;
+  --t-float-ink: #0e6f68;    --t-float-bg: #ddf2f0;
+  --t-double-ink: #12695a;   --t-double-bg: #dcf1eb;
+  --t-string-ink: #2c6b1e;   --t-string-bg: #e6f3e1;
+  --t-vector-ink: #7a22c4;   --t-vector-bg: #f2e8fc;
+  --t-uol-ink: #b03e0b;      --t-uol-bg: #fcebe0;
+  --t-canvas-ink: #b31a5b;   --t-canvas-bg: #fbe6ef;
+  --t-sound-ink: #9a1ca6;    --t-sound-bg: #f8e8fa;
+  --t-sub-ink: #455263;      --t-sub-bg: #ecf0f5;
+  --t-convex-ink: #0a6e88;   --t-convex-bg: #def1f6;
+  --t-null-ink: #5f6772;     --t-null-bg: #eff1f4;
+  --t-lua-ink: #5b21b6;      --t-lua-bg: #ede7fd;
+  --t-raw-ink: #8a4a0c;      --t-raw-bg: #f6ece0;
+}
+
+[data-theme="dark"] {
+  --t-int-ink: #9cbbff;      --t-int-bg: #16223c;
+  --t-short-ink: #79c6ea;    --t-short-bg: #0f2938;
+  --t-long-ink: #aea6ff;     --t-long-bg: #201e40;
+  --t-float-ink: #6fd8cb;    --t-float-bg: #0d2c29;
+  --t-double-ink: #63d6a6;   --t-double-bg: #0b2c24;
+  --t-string-ink: #93d77f;   --t-string-bg: #152c12;
+  --t-vector-ink: #cc9bf8;   --t-vector-bg: #281640;
+  --t-uol-ink: #f79f70;      --t-uol-bg: #381c0c;
+  --t-canvas-ink: #f58ab6;   --t-canvas-bg: #380f24;
+  --t-sound-ink: #e89aef;    --t-sound-bg: #320f38;
+  --t-sub-ink: #a5b3c4;      --t-sub-bg: #1d242d;
+  --t-convex-ink: #68c8e0;   --t-convex-bg: #0d2830;
+  --t-null-ink: #949ca8;     --t-null-bg: #20242a;
+  --t-lua-ink: #bfa4fc;      --t-lua-bg: #241944;
+  --t-raw-ink: #d9a967;      --t-raw-bg: #31230d;
+}
+
+/* ============================================================
+   REDUCED MOTION
+   Keep meaning, drop movement.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 1ms; --dur-fast: 1ms; --dur-base: 1ms;
+    --dur-slow: 1ms; --dur-slower: 1ms; --dur-loop: 1ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .skeleton { animation: none !important; background: var(--bg-sunken); }
+}
+
+/* ============================================================
+   THE "SAY IT BEFORE THE WRITE" SURFACE
+
+   One pair of tokens for the notice that stands between a person and an
+   irreversible or partial write: the truncation warning in find-and-replace,
+   the result cap in the search panel, the memory headroom in the open dialog.
+   They resolve through --amber-*, so both themes are already answered and a
+   future change to the amber ramp carries here rather than drifting from it.
+
+   These exist because three files had each picked their own literal for the
+   same idea, and a warning that looks different every time it appears is one
+   the eye stops recognising as a warning.
+   ============================================================ */
+:root {
+  --warn-bg: var(--amber-tint);
+  --warn-border: var(--amber-dot);
+  --warn-ink: var(--amber-ink);
+}
+
+/* ============================================================
+   NATIVE CONTROLS
+
+   Everything the app draws itself is on the coral accent; everything the
+   browser draws for us was on the system blue. Measured on one screen: the
+   open-a-client file list, the search panel's Values/Regex boxes and the
+   find-and-replace options are all native <input type=checkbox>, so a dialog
+   that is otherwise entirely coral had eight blue ticks down its left edge.
+
+   `accent-color` on :root reaches checkboxes, radios, range thumbs and
+   progress bars in one declaration, including the ones inside dialogs this
+   stylesheet has never heard of -- which is the point, since new panels keep
+   arriving. .check-row already set it locally; this is the same value for
+   every control that is not in a .check-row.
+   ============================================================ */
+:root {
+  accent-color: var(--coral-fill);
+  /* The other half of the same problem: a text caret and a selection
+     highlight are both browser-drawn and both were system blue. */
+  caret-color: var(--coral-fill);
+}
+
+/* A <select> is the one native control accent-color does not reach, and the
+   app has exactly one -- the sort picker above every child table. It carried
+   .field-input, which styles the box, and then the platform drew its own
+   chunky dropdown arrow and its own font inside it. This finishes the job:
+   the app's own chevron, drawn in the app's own ink, with room made for it. */
+select.field-input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-3) 50%),
+    linear-gradient(135deg, var(--text-3) 50%, transparent 50%);
+  background-position: calc(100% - 15px) calc(50% + 1px), calc(100% - 10px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+select.field-input:hover { background-color: var(--bg-hover); }

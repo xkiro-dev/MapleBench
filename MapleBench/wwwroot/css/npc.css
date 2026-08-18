@@ -1,0 +1,425 @@
+/* ============================================================
+   NPCs section.
+
+   Deliberately built from the same parts as Mobs mode: the stat tiles
+   (.stat-chip), the filter pills (.cat-tab), the pager (.pager) and the
+   skeleton rows are reused rather than re-cut here, so the two sections cannot
+   drift apart visually. Everything below is either genuinely new (the sprite
+   frame, the script and chat bindings, the container row) or an NPC-named twin
+   of a mob panel where the class name would otherwise read as a lie.
+   ============================================================ */
+
+/* The workspace layout rule ships with the section rather than living in
+   app.css: adding a section should mean adding two files, not editing the
+   shell's stylesheet. Harmless when NPCs are only reachable inside the
+   sections shell -- it applies to the standalone mode if one is ever added.
+   The breadcrumb rule is already written once for every non-Explorer mode in
+   mob.css, so it is not repeated here. */
+.workspace[data-mode="npcs"] { grid-template-columns: var(--rail-w) minmax(0, 1fr); }
+.workspace[data-mode="npcs"] .side-panel,
+.workspace[data-mode="npcs"] .inspector { display: none; }
+
+.npcs {
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: auto;
+  padding: var(--sp-4) var(--sp-6) var(--sp-8);
+  gap: var(--sp-4);
+}
+
+.npc-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--sp-4);
+}
+
+.npc-empty-actions { display: flex; gap: var(--sp-2); }
+
+/* --- first load ---------------------------------------------------------
+   The busy bar is absolutely positioned, so the panel has to be its
+   containing block. */
+.npc-loading { position: relative; overflow: hidden; }
+.npc-loading-text {
+  font-size: var(--fs-13); line-height: 1.55; color: var(--text-3);
+  margin-bottom: var(--sp-3);
+}
+.npc-loading-text b { color: var(--text-1); }
+.npc-skeleton { display: flex; flex-direction: column; }
+
+/* --- header --- */
+.npc-head { display: flex; align-items: center; gap: var(--sp-3); }
+.npc-head-text { flex: 1; min-width: 0; }
+.npc-head-title { font-size: var(--fs-18); font-weight: 700; letter-spacing: var(--ls-tight); }
+.npc-head-sub { font-size: var(--fs-12); color: var(--text-3); }
+.npc-head-sub b { color: var(--text-2); }
+
+.npc-select {
+  height: 34px; padding: 0 var(--sp-2);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+  font-size: var(--fs-13); cursor: pointer;
+}
+.npc-select:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+.npc-select:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* --- stats --- */
+.npc-stats { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+/* "—" for a figure String.wz would be needed to know, greyed so it does not
+   read as a value of its own. */
+.npc-stats .stat-value[data-tone="muted"] { color: var(--text-3); }
+
+/* --- toolbar --- */
+.npc-toolbar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.npc-search { position: relative; flex: 1 1 240px; min-width: 190px; }
+.npc-search input {
+  width: 100%; height: 38px; padding: 0 var(--sp-3) 0 var(--sp-8);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+}
+.npc-search input:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+.npc-search .icon {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3);
+}
+
+.npc-note {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3);
+  background: var(--amber-tint); color: var(--amber-ink);
+  border-radius: var(--r-md); font-size: var(--fs-12); line-height: 1.5;
+}
+
+/* --- selection bar --- */
+.npc-selbar {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+.npc-selcount { font-size: var(--fs-13); color: var(--text-3); margin-right: auto; }
+.npc-selbar[data-active="true"] .npc-selcount { color: var(--coral-ink); font-weight: 700; }
+
+.npc-result-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: var(--fs-13); color: var(--text-2); margin-bottom: var(--sp-3);
+}
+
+/* ============================================================
+   CARD GRID
+   ============================================================ */
+.npc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--sp-4);
+}
+
+.npc-card {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: none;
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 260px;
+}
+.npc-card:hover { border-color: var(--border-strong); }
+.npc-card[data-selected="true"] { border-color: var(--coral-fill); box-shadow: var(--sh-focus); }
+
+.npc-card-head { display: flex; align-items: flex-start; gap: var(--sp-2); }
+.npc-card-title { flex: 1; min-width: 0; }
+.npc-pick { flex: none; display: grid; place-items: center; padding-top: 2px; }
+.npc-pick input { width: 17px; height: 17px; accent-color: var(--coral-fill); cursor: pointer; }
+
+/* --- sprite -------------------------------------------------------------
+   The glyph sits underneath rather than beside: a 204 removes the <img> and
+   leaves the frame occupied, so the row does not reflow when a sprite is
+   missing and nothing ever shows a broken-image icon. */
+.npc-portrait {
+  position: relative; flex: none;
+  display: grid; place-items: center;
+  width: 44px; height: 44px;
+  background: var(--bg-field);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.npc-portrait[data-size="lg"] { width: 64px; height: 64px; }
+.npc-portrait img {
+  position: relative;
+  max-width: 100%; max-height: 100%;
+  /* WZ sprites are 30-60px of pixel art. Smoothing them into a blur is the one
+     thing guaranteed to make an editor look like it is showing the wrong file. */
+  image-rendering: pixelated;
+}
+.npc-portrait-glyph {
+  position: absolute; display: grid; place-items: center;
+  color: var(--text-3); opacity: 0.5;
+}
+/* Once a real sprite has painted, the placeholder goes -- keeping it behind a
+   sprite with transparent edges shows a ghost icon through the NPC. */
+.npc-portrait[data-loaded="true"] .npc-portrait-glyph { display: none; }
+
+.npc-title {
+  font-size: var(--fs-14); font-weight: 700; line-height: 1.25;
+  color: var(--text-1); text-align: left; word-break: break-word;
+}
+.npc-title:hover { color: var(--coral-ink); }
+.npc-sub { font-size: var(--fs-11); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.npc-func {
+  font-size: var(--fs-11); color: var(--text-2); line-height: 1.35;
+  margin-top: 2px; font-style: italic;
+}
+
+.npc-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.npc-badge {
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; padding: 3px 8px; border-radius: var(--r-pill);
+  background: var(--bg-sunken); color: var(--text-3);
+}
+.npc-badge[data-kind="shop"]     { background: var(--green-tint);  color: var(--green-ink); }
+.npc-badge[data-kind="script"]   { background: var(--purple-tint); color: var(--purple-ink); }
+.npc-badge[data-kind="storage"]  { background: var(--blue-tint);   color: var(--blue-ink); }
+.npc-badge[data-kind="link"]     { background: var(--amber-tint);  color: var(--amber-ink); }
+.npc-badge[data-kind="nameless"] { background: var(--red-tint);    color: var(--red-ink); }
+.npc-badge[data-kind="dirty"]    { background: var(--coral-tint);  color: var(--coral-ink); }
+
+.npc-row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-field);
+  border-radius: var(--r-md);
+  font-size: var(--fs-13);
+}
+.npc-row .k { flex: none; color: var(--text-3); }
+.npc-row .v {
+  margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums;
+  min-width: 0; text-align: right; word-break: break-all;
+}
+.npc-row .v[data-tone="amber"] { color: var(--amber-ink); }
+
+/* Zero controls at rest, same as a mob card: the values are the content. */
+.npc-actions { display: flex; gap: var(--sp-2); margin-top: auto; padding-top: var(--sp-2); }
+.npc-actions .btn { justify-content: center; }
+.npc-card .npc-actions { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.npc-card:hover .npc-actions,
+.npc-card:focus-within .npc-actions { opacity: 1; }
+
+/* ============================================================
+   NPC CARD DIALOG
+   ============================================================ */
+.npc-detail { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.npc-detail-head {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.npc-detail-id { min-width: 0; }
+.npc-detail-name { font-size: var(--fs-16); font-weight: 700; }
+
+.npc-warn {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-3);
+  background: var(--amber-tint); color: var(--amber-ink);
+  border: 1px solid color-mix(in srgb, var(--amber-ink) 30%, transparent);
+  border-radius: var(--r-md);
+}
+.npc-warn-text { flex: 1; font-size: var(--fs-12); line-height: 1.5; }
+
+.npc-detail-topline { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+/* Sticky inside .modal-body, which is the scroller: an NPC with "show absent"
+   on has 50-odd fields, and a field search that scrolls out of reach is a
+   field search nobody uses. */
+.npc-detail-tools {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  padding: var(--sp-2) 0;
+  background: var(--bg-raised);
+}
+.npc-modcount { font-size: var(--fs-12); color: var(--text-3); margin-left: auto; }
+.npc-modcount[data-active="true"] { color: var(--coral-ink); font-weight: 600; }
+
+.npc-sections { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.npc-section {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.npc-section > summary {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-3);
+  cursor: pointer; list-style: none;
+  font-size: var(--fs-13);
+}
+.npc-section > summary::-webkit-details-marker { display: none; }
+.npc-section > summary::before {
+  content: ""; flex: none;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  color: var(--text-3);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.npc-section[open] > summary::before { transform: rotate(90deg); }
+.npc-section > summary:hover { background: var(--bg-hover); }
+
+.npc-section-name { font-weight: 700; color: var(--text-1); }
+.npc-section-meta { color: var(--text-3); font-size: var(--fs-12); min-width: 0; }
+.npc-section-mod {
+  margin-left: auto;
+  background: var(--coral-tint); color: var(--coral-ink);
+  font-size: var(--fs-11); font-weight: 700;
+  padding: 2px 8px; border-radius: var(--r-pill);
+}
+.npc-section-foot {
+  padding: 0 var(--sp-3) var(--sp-3);
+  font-size: var(--fs-11); color: var(--text-3); line-height: 1.45;
+}
+
+.npc-field-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--sp-3);
+  padding: 0 var(--sp-3) var(--sp-3);
+}
+
+.npc-field { display: flex; flex-direction: column; gap: 5px; }
+.npc-field-label { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.npc-field-name { font-size: var(--fs-11); font-weight: 700; color: var(--text-2); }
+.npc-unit { font-size: var(--fs-10); color: var(--text-3); }
+.npc-was {
+  font-size: var(--fs-10); font-weight: 700;
+  background: var(--amber-tint); color: var(--amber-ink);
+  padding: 1px 6px; border-radius: var(--r-pill);
+  font-variant-numeric: tabular-nums;
+}
+.npc-absent-tag {
+  font-size: var(--fs-10); font-weight: 700;
+  background: var(--bg-sunken); color: var(--text-3);
+  padding: 1px 6px; border-radius: var(--r-pill);
+}
+/* Quiet by design: the WZ type matters when hideName turns out to be a String,
+   and is noise the rest of the time. */
+.npc-type-tag {
+  font-size: var(--fs-10); font-family: var(--font-mono);
+  color: var(--text-3); opacity: 0.75;
+}
+.npc-field[data-changed="true"] .npc-field-name { color: var(--coral-ink); }
+.npc-field[data-absent="true"] .npc-input { border-style: dashed; }
+
+.npc-input {
+  width: 100%; height: 32px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+  font-size: var(--fs-13); font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.npc-input:focus { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+.npc-input[data-invalid="true"] { border-color: var(--red-fill); background: var(--red-tint); }
+.npc-field[data-changed="true"] .npc-input { border-color: var(--coral-fill); }
+
+.npc-check { display: flex; align-items: center; gap: 8px; height: 32px; font-size: var(--fs-13); cursor: pointer; }
+.npc-check input { width: 17px; height: 17px; accent-color: var(--coral-fill); cursor: pointer; }
+
+.npc-field-hint { font-size: var(--fs-10); color: var(--text-3); line-height: 1.45; }
+
+/* A container reads as a link, not as a disabled input: an input that cannot be
+   typed into is the exact thing this row exists to avoid drawing. */
+.npc-container {
+  display: flex; align-items: center; gap: var(--sp-2);
+  min-height: 32px; padding: 0 var(--sp-2) 0 10px;
+  background: var(--bg-sunken);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+}
+.npc-container-count {
+  flex: 1; min-width: 0;
+  font-size: var(--fs-12); color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- script bindings and chat lines --- */
+.npc-binding-list {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: 0 var(--sp-3) var(--sp-3);
+}
+.npc-binding {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-field);
+  border-radius: var(--r-md);
+}
+.npc-binding[data-tone="bad"] { background: var(--red-tint); }
+.npc-binding-index {
+  flex: none; min-width: 34px;
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--text-3);
+  padding-top: 3px; font-variant-numeric: tabular-nums;
+}
+.npc-binding-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.npc-binding-main {
+  font-size: var(--fs-13); color: var(--text-1); line-height: 1.45;
+  word-break: break-word;
+}
+/* The script handler is a symbol the server looks up; the chat line is prose.
+   Quoting the one and monospacing the other keeps them from reading alike. */
+.npc-binding-main:not([data-quoted]) { font-family: var(--font-mono); font-size: var(--fs-12); }
+.npc-binding-main[data-quoted="true"]::before { content: "\201C"; color: var(--text-3); }
+.npc-binding-main[data-quoted="true"]::after { content: "\201D"; color: var(--text-3); }
+.npc-binding[data-tone="bad"] .npc-binding-main { color: var(--red-ink); }
+.npc-binding-extra {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  font-size: var(--fs-10); color: var(--text-3);
+}
+.npc-key-chip {
+  font-family: var(--font-mono); font-size: var(--fs-10);
+  background: var(--bg-sunken); color: var(--text-2);
+  padding: 1px 6px; border-radius: var(--r-pill);
+}
+
+/* ============================================================
+   BULK EDIT
+   ============================================================ */
+.npc-bulk { display: flex; flex-direction: column; gap: var(--sp-4); }
+.npc-bulk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sp-3); }
+.npc-bulk-field { display: flex; flex-direction: column; gap: 5px; }
+.npc-bulk-field label { font-size: var(--fs-11); font-weight: 700; color: var(--text-2); }
+.npc-bulk-field .npc-select, .npc-bulk-field .npc-input { width: 100%; }
+.npc-bulk-actions { display: flex; gap: var(--sp-2); }
+
+.npc-preview-host { min-height: 64px; }
+.npc-preview-empty {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-field); border-radius: var(--r-md);
+  font-size: var(--fs-12); color: var(--text-3); line-height: 1.5;
+}
+.npc-preview-empty[data-tone="bad"] { background: var(--red-tint); color: var(--red-ink); }
+
+.npc-preview-head {
+  display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap;
+  font-size: var(--fs-13); font-weight: 600; margin-bottom: var(--sp-2);
+}
+
+.npc-preview-scroll { max-height: 42vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-md); }
+.npc-preview { width: 100%; border-collapse: collapse; font-size: var(--fs-12); }
+.npc-preview th {
+  position: sticky; top: 0; z-index: var(--z-sticky);
+  text-align: left; padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--text-3);
+  background: var(--bg-raised); border-bottom: 1px solid var(--border);
+}
+.npc-preview td {
+  padding: 5px var(--sp-3); border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.npc-preview td.num { font-variant-numeric: tabular-nums; font-weight: 600; word-break: break-all; }
+.npc-preview-name { font-weight: 600; color: var(--text-1); }
+.npc-preview-arrow { color: var(--text-3); text-align: center; width: 24px; }
+.npc-preview-note { color: var(--amber-ink); font-size: var(--fs-11); }
+/* A skipped row still shows its current value -- greying the whole row to
+   invisibility would hide the value that explains why it was skipped. */
+.npc-preview tr[data-skipped="true"] td { background: var(--bg-sunken); color: var(--text-3); }
+.npc-preview tr[data-skipped="true"] .npc-preview-name { color: var(--text-3); }

@@ -1,0 +1,343 @@
+/* ============================================================
+   The sectioned workspace, and the Database section inside it.
+
+   Two things in one file on purpose: Database mode only ever renders into the
+   section stage, and the shell only exists to hold sections, so splitting them
+   would mean two stylesheets that are never loaded apart. Same shape as
+   cashshop.css and mob.css -- panels, stat chips, filter pills and the pager
+   are reused from cashshop.css rather than restated here.
+   ============================================================ */
+
+/* The Explorer's tree and inspector have nothing to say about a card grid, so
+   the sectioned workspace gets the rail and the stage and nothing else. Same
+   rule the other two modes already carry, written for the shell so every
+   section inherits it. */
+.workspace[data-mode="sections"] { grid-template-columns: minmax(0, 1fr); }
+.workspace[data-mode="sections"] .rail,
+.workspace[data-mode="sections"] .side-panel,
+.workspace[data-mode="sections"] .inspector { display: none; }
+
+/* ============================================================
+   SHELL
+   ============================================================ */
+
+.sections {
+  display: grid;
+  grid-template-columns: minmax(0, 250px) minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+  transition: grid-template-columns var(--dur-slow) var(--ease-out);
+}
+.sections[data-nav-collapsed="true"] { grid-template-columns: 42px minmax(0, 1fr); }
+
+/* One column, list on top, once the stage would be narrower than a card grid. */
+@media (max-width: 880px) {
+  .sections { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: auto; }
+  .sections[data-nav-collapsed="true"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .sections[data-nav-collapsed="true"] .sec-item { display: none; }
+}
+
+.sec-list {
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-4) var(--sp-3);
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-page));
+  overflow-x: hidden;
+  overflow-y: auto;
+  transition: gap var(--dur-slow) var(--ease-out),
+              padding var(--dur-slow) var(--ease-out);
+}
+
+.sec-list-head {
+  display: flex; align-items: center; gap: var(--sp-2);
+  min-height: 30px;
+}
+
+.sec-list-title {
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--text-3);
+  padding: 0 var(--sp-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 1;
+  transition: max-width var(--dur-slow) var(--ease-out),
+              padding var(--dur-slow) var(--ease-out),
+              opacity var(--dur-fast) var(--ease-standard),
+              visibility 0s linear 0s;
+}
+
+.sec-list-fold { flex: none; }
+.sec-list-fold > svg { transition: transform var(--dur-base) var(--ease-out); transform: rotate(180deg); }
+
+.sections[data-nav-collapsed="true"] .sec-list {
+  gap: 0;
+  padding-inline: 4px;
+  overflow-x: hidden;
+}
+.sections[data-nav-collapsed="true"] .sec-list-head { justify-content: center; }
+.sections[data-nav-collapsed="true"] .sec-list-title {
+  flex: 0 0 0;
+  max-width: 0;
+  padding-inline: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: max-width var(--dur-slow) var(--ease-in),
+              padding var(--dur-slow) var(--ease-in),
+              opacity var(--dur-instant) var(--ease-in),
+              visibility 0s linear var(--dur-instant);
+}
+.sections[data-nav-collapsed="true"] .sec-list-fold > svg { transform: rotate(0deg); }
+.sections[data-nav-collapsed="true"] .sec-item {
+  min-height: 0;
+  max-height: 0;
+  padding-block: 0;
+  border-width: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-4px);
+}
+.sections[data-nav-collapsed="true"] .sec-body {
+  max-width: 0; opacity: 0; visibility: hidden;
+  transition: max-width var(--dur-slow) var(--ease-in),
+              opacity var(--dur-instant) var(--ease-in),
+              visibility 0s linear var(--dur-instant);
+}
+
+@media (max-width: 880px) {
+  .sec-list { border-right: 0; border-bottom: 1px solid var(--border); }
+  .sections[data-nav-collapsed="true"] .sec-list { padding-block: 8px; }
+  .sections[data-nav-collapsed="true"] .sec-list-head { justify-content: flex-start; }
+}
+
+.sec-group-toggle {
+  display: flex; align-items: center; gap: 7px;
+  width: 100%; margin-top: var(--sp-2); padding: 8px var(--sp-2);
+  border-radius: var(--r-md);
+  color: var(--text-3);
+  font-size: var(--fs-11); font-weight: 700; text-align: left;
+  transition: color var(--dur-fast), background var(--dur-fast);
+}
+.sec-group-toggle:hover { color: var(--text-1); background: var(--bg-hover); }
+.sec-group-toggle > svg { transition: transform var(--dur-base) var(--ease-out); }
+.sec-group-toggle:hover > svg { transform: translateX(2px); }
+.sec-group-count {
+  margin-left: auto; min-width: 20px; padding: 1px 6px;
+  border-radius: var(--r-pill); background: var(--bg-sunken);
+  color: var(--text-3); font-family: var(--font-mono); text-align: center;
+}
+
+.sec-item {
+  /* Centred, not top-aligned. A ready section is now one line, and a glyph
+     hanging off the top of a single line reads as a layout mistake. */
+  display: flex; align-items: center; gap: var(--sp-3);
+  width: 100%; text-align: left;
+  padding: var(--sp-2) var(--sp-3);
+  min-height: 48px; max-height: 48px;
+  border: 1px solid transparent; border-radius: var(--r-lg);
+  background: transparent; color: var(--text-1);
+  transition: background var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast),
+              box-shadow var(--dur-fast) var(--ease-out),
+              max-height var(--dur-slow) var(--ease-out),
+              padding var(--dur-slow) var(--ease-out),
+              opacity var(--dur-fast) var(--ease-standard),
+              transform var(--dur-slow) var(--ease-out),
+              visibility 0s linear 0s;
+}
+.sections[data-nav-collapsed="true"] .sec-item {
+  transition: max-height var(--dur-slow) var(--ease-in),
+              padding var(--dur-slow) var(--ease-in),
+              opacity var(--dur-instant) var(--ease-in),
+              transform var(--dur-fast) var(--ease-in),
+              visibility 0s linear var(--dur-instant);
+}
+.sec-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.sec-item[data-active="true"] {
+  background: var(--bg-selected);
+  border-color: transparent;
+  box-shadow: inset 3px 0 0 var(--coral-fill);
+}
+
+/* Not dimmed into illegibility: the point of listing an unbuilt section is that
+   its blurb can be read. It is unmistakably inert -- no hover, no pointer, a
+   flat surface -- and the chip beside the name says why. */
+.sec-item:disabled { cursor: default; color: var(--text-3); }
+.sec-item:disabled .sec-label { color: var(--text-2); }
+
+.sec-glyph {
+  display: grid; place-items: center; flex: none;
+  width: 30px; height: 30px; border-radius: var(--r-md);
+  background: var(--bg-sunken); color: var(--text-2);
+}
+.sec-item[data-active="true"] .sec-glyph { background: var(--bg-sunken); color: var(--coral-ink); }
+
+/* flex:1 so the ready dot can be pushed to the far edge of the entry rather
+   than sitting against the label. */
+.sec-body {
+  display: flex; flex-direction: column; gap: 3px;
+  min-width: 0; max-width: 190px; flex: 1; opacity: 1; overflow: hidden;
+  transition: max-width var(--dur-slow) var(--ease-out),
+              opacity var(--dur-fast) var(--ease-standard),
+              visibility 0s linear 0s;
+}
+.sec-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sec-label { font-size: var(--fs-13); font-weight: 700; }
+.sec-state { display: grid; place-items: center; margin-left: auto; }
+
+.sec-chip {
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; padding: 2px 7px; border-radius: var(--r-pill);
+  background: var(--bg-sunken); color: var(--text-3);
+}
+
+/* The blurb moved to the entry's tooltip; see paintList in sections.js. */
+
+.sec-need {
+  display: flex; align-items: center; gap: 5px;
+  font-size: var(--fs-10); color: var(--text-3);
+}
+.sec-dot {
+  flex: none; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-3);
+}
+/* The ready case: one dot on the title line and no sentence at all. Pushed to
+   the end of the line so it reads as a state light rather than as a bullet in
+   front of the name. */
+.sec-head .sec-dot[data-state="ready"] { background: var(--green-fill); }
+.sec-head .sec-dot[data-state="error"] { background: var(--red-fill); }
+.sec-need[data-state="ready"] { color: var(--green-ink); }
+.sec-need[data-state="ready"] .sec-dot { background: var(--green-fill); }
+.sec-need[data-state="missing"] { color: var(--amber-ink); }
+.sec-need[data-state="missing"] .sec-dot { background: var(--amber-fill); }
+.sec-need[data-state="error"] { color: var(--red-ink); }
+.sec-need[data-state="error"] .sec-dot { background: var(--red-fill); }
+
+/* The stages the sections render into, one per section, stacked and shown one
+   at a time. They cannot carry a class of their own -- every mode rewrites its
+   host's className on render -- so the wrapper positions them and the mode's own
+   rule (.shop, .mobs, .db) does the scrolling. */
+.sec-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.editors-empty { justify-content: center; }
+.sec-main > .stage-body { min-height: 0; }
+/* Spelled out rather than left to `hidden`: the UA rule for [hidden] is one
+   class worth of specificity, so `.shop { display: flex }` in an author
+   stylesheet beat it and the hidden section stayed on screen. */
+.sec-main > [hidden] { display: none; }
+
+/* ============================================================
+   DATABASE
+   ============================================================ */
+
+.db {
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: auto;
+  padding: var(--sp-4) var(--sp-6) var(--sp-8);
+  gap: var(--sp-4);
+}
+
+.db-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--sp-4);
+}
+
+.db-head { display: flex; align-items: center; gap: var(--sp-3); }
+.db-head-text { flex: 1; min-width: 0; }
+.db-head-title { font-size: var(--fs-18); font-weight: 700; letter-spacing: var(--ls-tight); }
+.db-head-sub { font-size: var(--fs-12); color: var(--text-3); margin-top: 2px; }
+.db-head-sub b { color: var(--text-2); }
+
+.db-toolbar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.db-search { position: relative; flex: 1 1 320px; min-width: 220px; }
+.db-search input {
+  width: 100%; height: 38px; padding: 0 var(--sp-3) 0 var(--sp-8);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg-field); color: var(--text-1);
+}
+.db-search input:disabled { background: var(--bg-sunken); color: var(--text-3); cursor: not-allowed; }
+.db-search .icon {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3);
+}
+
+/* Tone, padding and shape now come from .notice in app.css; only the spacing
+   to the toolbar above it belongs to this screen. */
+.db .notice { margin-top: var(--sp-3); }
+
+.db-result-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: var(--fs-13); color: var(--text-2); margin-bottom: var(--sp-3);
+}
+
+.db-empty-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; justify-content: center; }
+
+/* --- result grid --- */
+.db-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-3);
+}
+
+.db-card {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  transition: background var(--dur-fast) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+}
+.db-card:hover { background: var(--bg-hover); box-shadow: var(--sh-sm); }
+.db-card:focus-visible { border-color: var(--border-focus); box-shadow: var(--sh-focus); outline: none; }
+/* The probe behind a click is a couple of round trips over a whole client, so
+   the card says it is working rather than looking ignored. */
+.db-card[aria-busy="true"] { opacity: 0.55; cursor: progress; }
+
+.db-thumb {
+  display: grid; place-items: center; flex: none;
+  width: 48px; height: 48px; border-radius: var(--r-md); overflow: hidden;
+  background-color: var(--checker-a);
+  background-image:
+    linear-gradient(45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-b) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-b) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-b) 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+}
+.db-thumb img { image-rendering: pixelated; }
+.db-thumb .placeholder { color: var(--text-3); opacity: 0.75; }
+
+.db-card-text { flex: 1; min-width: 0; }
+.db-name {
+  font-size: var(--fs-13); font-weight: 650; line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.db-id { font-size: var(--fs-11); color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+.db-badge {
+  flex: none;
+  font-size: var(--fs-10); font-weight: 700; letter-spacing: var(--ls-caps);
+  text-transform: uppercase; padding: 3px 8px; border-radius: var(--r-pill);
+  background: var(--bg-sunken); color: var(--text-3);
+}
+/* One tint per kind, from the same pool the type colours use, so a glance down
+   the grid separates the interleaved pools without reading the badge. */
+.db-badge[data-kind="item"] { background: var(--purple-tint); color: var(--purple-ink); }
+.db-badge[data-kind="mob"] { background: var(--green-tint); color: var(--green-ink); }
+.db-badge[data-kind="skill"] { background: var(--blue-tint); color: var(--blue-ink); }
+.db-badge[data-kind="npc"] { background: var(--amber-tint); color: var(--amber-ink); }
+.db-badge[data-kind="map"] { background: var(--coral-tint); color: var(--coral-ink); }

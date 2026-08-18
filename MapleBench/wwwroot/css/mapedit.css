@@ -1,0 +1,790 @@
+/* Map editor section. Scoped under .me-* so it can load last without fighting
+   the other section stylesheets.
+
+   Layout philosophy: THE CANVAS IS THE APP. Side content lives on a thin icon
+   rail and unfolds on demand — the layer dock docks, the palette slides OVER
+   the canvas as a wide drawer, the raw inspector only exists for a selection.
+   Type runs at 13px, not 11 — small text everywhere is its own kind of broken. */
+
+.me-root [hidden], .me-canvas-wrap [hidden] { display: none !important; }
+
+.me-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  height: 100%;
+  min-height: 0;
+  font-size: var(--fs-13);
+}
+
+.me-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.me-toolbar-spacer { flex: 1; }
+
+.me-title { display: inline-flex; align-items: baseline; gap: 6px; }
+
+.me-dirty {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--coral-fill);
+  display: inline-block;
+  align-self: center;
+}
+
+.me-chip {
+  font-size: var(--fs-12);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* ---- the body: rail · dock · canvas · inspector ---- */
+
+.me-body {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---- icon rail ---- */
+
+.me-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-page));
+  width: 44px;
+  flex: none;
+  align-items: center;
+}
+
+.me-rail-btn {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: var(--fs-14);
+  font-weight: 600;
+  transition: color var(--dur-fast), background var(--dur-fast),
+              border-color var(--dur-fast), transform var(--dur-instant);
+}
+.me-rail-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+.me-rail-btn:active:not(:disabled) { transform: translateY(1px); }
+.me-rail-btn.active {
+  background: var(--coral-tint);
+  border-color: color-mix(in srgb, var(--coral-ink) 35%, transparent);
+  color: var(--coral-ink);
+}
+.me-rail-btn:disabled { opacity: 0.35; cursor: default; }
+.me-rail-ic { display: inline-flex; align-items: center; }
+.me-rail-spacer { flex: 1; }
+
+/* ---- layer dock (left, collapsible) ---- */
+
+.me-dock {
+  width: 236px;
+  flex: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-page));
+}
+.me-dock:not([hidden]), .me-dock[data-motion="opening"] {
+  animation: drawerIn var(--dur-slow) var(--ease-out) both;
+}
+.me-dock[data-motion="closing"] {
+  pointer-events: none;
+  animation: drawerOut var(--dur-fast) var(--ease-in) both;
+}
+
+.me-dock-head { display: flex; align-items: center; justify-content: space-between; }
+.me-dock-head h4 { margin: 0 0 6px; font-size: 13px; color: var(--text-2); }
+.me-dock-close { padding: 0 6px; height: 22px; font-size: 11px; }
+
+.me-layer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.me-layer-name { min-width: 56px; }
+.me-layer-counts { margin-left: auto; white-space: nowrap; }
+.me-layer-row .me-chip { overflow: hidden; text-overflow: ellipsis; max-width: 96px; }
+
+.me-eye {
+  border: none; background: none; cursor: pointer; padding: 2px;
+  color: var(--text-1); display: inline-flex;
+  border-radius: var(--r-sm);
+  transition: color var(--dur-fast), background var(--dur-fast), opacity var(--dur-fast);
+}
+.me-eye:hover { background: var(--bg-hover); }
+.me-eye[aria-pressed="false"] { color: var(--text-3); opacity: 0.45; }
+
+.me-overlay-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+
+/* ---- canvas ---- */
+
+.me-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: #1b2330;
+  outline: none;
+}
+
+.me-canvas { display: block; touch-action: none; cursor: crosshair; }
+
+/* One-line status bar along the bottom of the canvas. */
+.me-statusbar {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 26px;
+  padding: 0 10px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(10, 14, 20, 0.72);
+  backdrop-filter: blur(3px);
+  pointer-events: none;
+}
+.me-statusbar-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Who owns the keyboard — always visible, clickable for the list. */
+.me-keychip {
+  pointer-events: auto;
+  border: 1px solid rgba(127, 208, 255, 0.5);
+  background: rgba(127, 208, 255, 0.12);
+  color: #9fd8ff;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-11);
+  font-family: inherit;
+  padding: 1px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast);
+}
+.me-keychip:hover { background: rgba(127, 208, 255, 0.22); }
+
+/* Overlay toggles: an icon strip pinned to the canvas top. */
+.me-ovstrip {
+  position: absolute;
+  top: 8px; left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(10, 14, 20, 0.66);
+  backdrop-filter: blur(3px);
+  z-index: 20;
+}
+.me-ov-btn {
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 7px;
+  cursor: pointer;
+  transition: color var(--dur-fast), background var(--dur-fast), opacity var(--dur-fast);
+}
+.me-ov-btn:hover { background: rgba(255, 255, 255, 0.12); }
+.me-ov-btn[aria-pressed="false"] {
+  color: rgba(255, 255, 255, 0.3);
+  text-decoration: line-through;
+}
+
+/* Zoom cluster, bottom-right corner (above the status bar). */
+.me-zoomctl {
+  position: absolute;
+  right: 10px; bottom: 34px;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(10, 14, 20, 0.66);
+  backdrop-filter: blur(3px);
+  z-index: 20;
+}
+.me-zoom-btn, .me-zoom-pct {
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  padding: 2px 8px;
+  cursor: pointer;
+  min-width: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--dur-fast), background var(--dur-fast), transform var(--dur-instant);
+}
+.me-zoom-btn:active, .me-zoom-pct:active { transform: translateY(1px); }
+.me-zoom-pct { font-size: 11.5px; min-width: 46px; text-align: center; }
+.me-zoom-btn:hover, .me-zoom-pct:hover { background: rgba(255, 255, 255, 0.12); }
+.me-zoom-fit { font-size: 12px; }
+
+/* Minimap, bottom-left: the whole map, the viewport, click-to-jump. */
+.me-mmbox {
+  position: absolute;
+  left: 10px; bottom: 34px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(10, 14, 20, 0.66);
+  backdrop-filter: blur(3px);
+  z-index: 20;
+}
+.me-mmbox:not([hidden]), .me-mmbox[data-motion="opening"] {
+  animation: popoverIn var(--dur-base) var(--ease-out) both;
+}
+.me-mmbox[data-motion="closing"] {
+  pointer-events: none;
+  animation: popoverOut var(--dur-fast) var(--ease-in) both;
+}
+.me-mm-canvas { display: block; cursor: pointer; }
+
+/* ---- palette drawer: slides OVER the canvas, genuinely large ---- */
+
+.me-drawer {
+  position: absolute;
+  top: 0; bottom: 26px; left: 0;
+  width: 430px;
+  max-width: 88%;
+  display: flex;
+  flex-direction: column;
+  /* The drawer sits on the dark canvas, so it carries its own dark scheme —
+     scoped variable overrides keep every inherited component (chips, inputs,
+     labels) legible instead of light-theme-ink-on-dark-panel. */
+  --text-1: #e9edf4;
+  --text-2: #aab4c4;
+  --text-3: #8792a3;
+  --text-muted: #8792a3;
+  --border: #39445a;
+  --bg-field: #10161f;
+  --bg-sunken: #10161f;
+  --bg-panel: #1d2430;
+  --bg-2: #1d2430;
+  --bg-raised: #232c3b;
+  --bg-hover: rgba(255, 255, 255, 0.08);
+  --hover: rgba(255, 255, 255, 0.08);
+  --well: rgba(0, 0, 0, 0.3);
+  --coral-ink: #ff9068;
+  --coral-tint: rgb(255 144 104 / 0.14);
+  --border-focus: #ff9068;
+  --red-ink: #ff7f96;
+  --red-tint: #3c1420;
+  --green-ink: #5fd9a4;
+  --green-tint: #0b2c24;
+  --warn-bg: #33260d;
+  --warn-border: #f5c06a;
+  --warn-ink: #f5c06a;
+  color: var(--text-1);
+  background: rgba(24, 30, 41, 0.97);
+  border-right: 1px solid var(--border);
+  box-shadow: 8px 0 30px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 25;
+}
+.me-drawer:not([hidden]), .me-drawer[data-motion="opening"] {
+  animation: drawerIn var(--dur-slow) var(--ease-out) both;
+}
+.me-drawer[data-motion="closing"] {
+  pointer-events: none;
+  animation: drawerOut var(--dur-base) var(--ease-in) both;
+}
+.me-drawer input, .me-drawer select {
+  background: var(--bg-field);
+  color: var(--text-1);
+  border-color: var(--border);
+}
+
+.me-drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  flex: none;
+}
+
+.me-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+.me-drawer-grip {
+  position: absolute;
+  top: 0; bottom: 0; right: -4px;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 26;
+}
+.me-drawer-grip:hover { background: rgba(127, 208, 255, 0.25); }
+
+/* ---- banners (refusal, link stub, idle) ---- */
+
+.me-banner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 48px;
+  pointer-events: none;
+  z-index: 24;
+}
+
+.me-banner-card {
+  pointer-events: auto;
+  max-width: 500px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  box-shadow: var(--sh-xl);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--fs-13);
+}
+.me-banner:not([hidden]), .me-banner[data-motion="opening"] {
+  animation: backdropIn var(--dur-base) var(--ease-out) both;
+}
+.me-banner:not([hidden]) .me-banner-card,
+.me-banner[data-motion="opening"] .me-banner-card {
+  animation: popoverIn var(--dur-base) var(--ease-out) both;
+}
+.me-banner[data-motion="closing"] {
+  pointer-events: none;
+  animation: backdropOut var(--dur-fast) var(--ease-in) both;
+}
+.me-banner[data-motion="closing"] .me-banner-card {
+  animation: popoverOut var(--dur-fast) var(--ease-in) both;
+}
+
+.me-banner-card h3 { display: flex; align-items: center; gap: 6px; margin: 0; }
+
+.me-refusal { border-color: var(--red-ink); }
+.me-refusal h3 { color: var(--red-ink); }
+.me-refusal-text { color: var(--red-ink); }
+
+.me-notice { border-color: var(--border); }
+
+/* ---- map picker modal ---- */
+
+.me-picker { display: flex; flex-direction: column; gap: 8px; min-height: 380px; }
+
+.me-picker-list {
+  overflow-y: auto;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.me-picker-row {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 10px;
+  padding: 7px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.me-picker-row:hover { background: var(--bg-hover); }
+.me-picker-id { color: var(--text-2); }
+.me-picker-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- inspector (right, on demand, selection only) ---- */
+
+.me-inspector {
+  width: 280px;
+  flex: none;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-page));
+  font-size: var(--fs-13);
+}
+.me-inspector:not([hidden]), .me-inspector[data-motion="opening"] {
+  animation: drawerInRight var(--dur-slow) var(--ease-out) both;
+}
+.me-inspector[data-motion="closing"] {
+  pointer-events: none;
+  animation: drawerOutRight var(--dur-fast) var(--ease-in) both;
+}
+
+.me-inspector h4 { margin: 0 0 8px; }
+
+.me-insp-name { font-weight: 600; margin: 0 0 6px; }
+.me-insp-actions { margin-top: 10px; }
+
+.me-node-table { display: flex; flex-direction: column; gap: 2px; }
+
+.me-node-row {
+  display: grid;
+  grid-template-columns: minmax(70px, auto) auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+/* Verbatim names: trailing spaces are DATA here, so nothing may collapse. */
+.me-node-name { font-family: var(--font-mono, monospace); white-space: pre; }
+
+.me-trailing-space {
+  background: var(--red-tint);
+  color: var(--red-ink);
+  border-radius: 3px;
+  letter-spacing: 2px;
+  cursor: help;
+}
+
+.me-node-type { font-size: 11px; }
+
+.me-node-value { height: 26px; font-size: 13px; min-width: 0; }
+
+.me-node-open { justify-self: start; padding: 0 8px; height: 24px; }
+
+@media (max-width: 1100px) {
+  .me-dock { width: 190px; }
+  .me-inspector { width: 230px; }
+}
+
+/* ---- palette content ---- */
+
+.me-pal-kinds { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.me-pal-kind { cursor: pointer; border: none; font-size: 12.5px; padding: 3px 10px; }
+.me-pal-kind.active {
+  background: var(--coral-tint);
+  color: var(--coral-ink);
+  font-weight: 700;
+}
+
+.me-pal-armed {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 6px 10px; margin-bottom: 10px; border-radius: 6px; font-size: 13px;
+  background: var(--coral-tint);
+  color: var(--coral-ink);
+}
+
+/* Missing-prerequisite warnings say what is missing ON the palette. */
+.me-pal-warn {
+  padding: 8px 10px;
+  margin: 6px 0;
+  border-radius: 6px;
+  border: 1px solid var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.me-pal-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.me-pal-layer { flex: 1; height: 28px; font-size: 13px; }
+.me-pal-note { font-size: 12px; line-height: 1.45; }
+.me-pal-draw { width: 100%; margin: 6px 0; }
+
+.me-pal-group { margin: 12px 0 5px; font-size: 12px; text-transform: none; opacity: 0.75; }
+
+/* Set browser: a grid of pictures, the set's name under each. */
+.me-pal-setgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.me-pal-setcell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-sunken);
+  cursor: pointer;
+  color: inherit;
+  min-width: 0;
+  transition: border-color var(--dur-fast), background var(--dur-fast), transform var(--dur-instant);
+}
+.me-pal-setcell:hover { border-color: var(--coral-ink); background: var(--bg-hover); }
+.me-pal-setcell:active { transform: translateY(1px); }
+.me-pal-setface {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 5px;
+  background:
+    repeating-conic-gradient(rgba(255,255,255,0.04) 0% 25%, transparent 0% 50%) 0 0 / 14px 14px,
+    #10161f;
+}
+.me-pal-setface img { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+.me-pal-setname {
+  font-size: 12px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Entry grid: pictures at rest, badges for what a still cannot show. */
+.me-pal-grid { display: flex; flex-wrap: wrap; gap: 5px; }
+.me-pal-cell {
+  position: relative; width: 68px; height: 68px; padding: 2px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--bg-sunken); cursor: pointer; overflow: hidden;
+  transition: border-color var(--dur-fast), background var(--dur-fast), transform var(--dur-instant);
+}
+.me-pal-cell:hover { border-color: var(--coral-ink); background: var(--bg-hover); }
+.me-pal-cell:active { transform: translateY(1px); }
+.me-pal-cell img { max-width: 100%; max-height: 100%; image-rendering: pixelated; }
+
+/* Cells with a caption (mobs, NPCs, reactors, portals) grow a name plate. */
+.me-pal-cell-tall {
+  width: 88px; height: 92px;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding-top: 4px;
+}
+.me-pal-cell-tall img { max-height: 62px; }
+.me-pal-caption {
+  margin-top: auto;
+  width: 100%;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.me-pal-fh {
+  position: absolute; right: 2px; bottom: 1px; font-size: 9px; line-height: 1;
+  padding: 1px 3px; border-radius: var(--r-xs); color: var(--green-ink);
+  background: var(--green-tint);
+}
+.me-pal-frames {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 3px;
+  background: var(--purple-fill);
+  color: var(--text-on-fill);
+  pointer-events: none;
+}
+.me-pal-broken { opacity: 0.75; }
+.me-pal-brokenmark { color: var(--red-ink); font-size: 15px; }
+.me-pal-global { margin-bottom: 10px; }
+.me-pal-globalresults { display: flex; flex-direction: column; gap: 4px; }
+
+/* Life palette grid. */
+.me-pal-lifegrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 5px;
+  margin-top: 8px;
+}
+.me-pal-lifegrid .me-pal-cell { width: auto; min-height: 92px; }
+
+.me-minimap-confirm {
+  display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; font-size: 13px;
+  line-height: 1.45; cursor: pointer;
+}
+.me-minimap-confirm input { margin-top: 2px; }
+
+.me-newmap { display: flex; flex-direction: column; gap: 8px; }
+.me-auto-fh { margin: 6px 0; width: 100%; font-size: 13px; }
+
+/* ================= direct-manipulation layer ================= */
+
+/* Floating property panel: the selected thing's hot fields, in place. */
+.me-float {
+  position: absolute;
+  z-index: 22;   /* above canvas furniture, BELOW the palette drawer */
+  min-width: 190px;
+  max-width: 360px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-raised) 96%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: var(--sh-xl);
+  backdrop-filter: blur(4px);
+  font-size: 13px;
+}
+.me-float-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.me-float-grab { cursor: move; user-select: none; touch-action: none; }
+.me-float-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+}
+.me-float-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.me-float-field > span {
+  color: var(--text-3, var(--text-muted));
+  font-size: 12px;
+}
+.me-float-num {
+  width: 66px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-field);
+  color: var(--text-1, inherit);
+  font-size: 13px;
+}
+.me-float-check input { margin: 0; }
+.me-float-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.me-float-btn { font-size: 12px; padding: 2px 8px; }
+
+/* In-canvas tile variant picker. */
+.me-picker-pop {
+  position: absolute;
+  z-index: 23;
+  max-width: 320px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--sh-xl);
+}
+.me-picker-pop h5 { margin: 0 0 6px; font-size: 12px; }
+.me-pal-current { outline: 2px solid var(--border-focus); outline-offset: 1px; }
+
+/* Palette hover flyout: the asset, bigger, playing when animated. */
+.me-flyout {
+  position: fixed;
+  z-index: 60;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--sh-xl);
+  pointer-events: none;
+}
+.me-flyout-title { font-size: 12px; font-weight: 600; margin-bottom: 6px; word-break: break-all; }
+.me-flyout-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  background:
+    repeating-conic-gradient(rgba(255,255,255,0.05) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px,
+    #10161f;
+  border-radius: 5px;
+  padding: 6px;
+}
+.me-flyout-stage img, .me-flyout-canvas { max-width: 240px; max-height: 240px; image-rendering: pixelated; }
+.me-flyout-meta { font-size: 11px; margin-top: 5px; }
+
+/* History popover. */
+.me-hist-pop {
+  position: fixed;
+  z-index: 70;
+  width: 300px;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--sh-xl);
+  font-size: 13px;
+}
+.me-hist-pop h5 { margin: 4px 0; font-size: 12px; color: var(--text-3, var(--text-muted)); }
+.me-hist-row { padding: 3px 4px; border-radius: 4px; }
+.me-hist-row:first-of-type { background: var(--coral-tint); }
+.me-hist-redo { opacity: 0.55; }
+
+.me-picker-pop:not([hidden]),
+.me-hist-pop,
+.me-flyout {
+  animation: popoverIn var(--dur-base) var(--ease-out) both;
+}
+.me-picker-pop[data-motion="closing"],
+.me-hist-pop[data-motion="closing"],
+.me-flyout[data-motion="closing"] {
+  pointer-events: none;
+  animation: popoverOut var(--dur-fast) var(--ease-in) both;
+}
+
+/* Keys help modal. */
+.me-keys-grid { display: flex; flex-direction: column; gap: 4px; }
+.me-keys-row {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 12px;
+  font-size: 13px;
+  padding: 2px 0;
+}
+.me-keys-combo { color: var(--text-2); }

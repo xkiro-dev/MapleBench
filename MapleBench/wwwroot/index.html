@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MapleBench</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/motion.css">
+  <link rel="stylesheet" href="css/cashshop.css">
+  <!-- After cashshop.css on purpose: Mobs mode reuses its stat tiles, filter
+       pills and pager, and adds its own layout rule for .workspace[data-mode="mobs"]. -->
+  <link rel="stylesheet" href="css/mob.css">
+  <!-- Last: it holds both the sectioned workspace that Mobs and Cash Shop are
+       mounted inside and the Database section that lives in it, so it has to be
+       able to sit on top of the two stylesheets those modes bring with them. -->
+  <link rel="stylesheet" href="css/database.css">
+  <link rel="stylesheet" href="css/skill.css">
+  <link rel="stylesheet" href="css/npc.css">
+  <link rel="stylesheet" href="css/strings.css">
+  <!-- The port dialog. It only ever renders inside a modal, so it brings no
+       layout of its own and can sit last without needing to outrank anything. -->
+  <link rel="stylesheet" href="css/port.css">
+  <!-- The import picker. Loaded after app.css because it restyles .picker-row and
+       .tree-* for use inside a modal, and after database.css because it
+       deliberately mirrors that grid's geometry -- the two must not fight, and
+       the later one is the one that means it here. -->
+  <link rel="stylesheet" href="css/import.css">
+  <!-- Dual Client View reuses the archive trees and import review in a
+       purpose-built side-by-side workspace. -->
+  <link rel="stylesheet" href="css/twopane.css">
+  <!-- The map editor section. Scoped entirely under .me-*, so order barely
+       matters. -->
+  <link rel="stylesheet" href="css/mapedit.css">
+  <!-- The brand mark on the accent tile. Geometry is branding/maplebench-mark.svg
+       verbatim; translate(4 4) lands its 24-unit grid at 4-28 inside the 32-unit
+       tile, i.e. centred with a 4-unit margin on every side, so the tab icon,
+       the header mark and the taskbar .ico are all the same shape. rx 9 matches
+       .brand-mark. '#' must stay percent-encoded as %23 inside a data URI. -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='9' fill='%23cf4520'/><g transform='translate(4 4)' fill='white'><path d='M3.7 7.4H6.7V14.2H3.7ZM9 4.1H15V6.9H9ZM10.8 6.5H13.2V14.2H10.8ZM17.3 10.6H20.5V14.2H17.3ZM2.4 13.8H21.6V16.6H2.4ZM4.4 16.2H7.2V19.4H4.4ZM16.8 16.2H19.6V19.4H16.8Z'/></g></svg>">
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ COMMAND BAR ============ -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" id="brand-mark" aria-hidden="true"></div>
+      <div class="brand-text">
+        <span class="brand-name">MapleBench</span>
+        <span class="brand-sub">WZ Workbench</span>
+      </div>
+    </div>
+
+    <div class="omnibox">
+      <button class="omnibox-btn" id="omnibox" data-tip="Jump to any node, or run a command · Ctrl P">
+        <span class="om-icon" aria-hidden="true"></span>
+        <span class="om-label">Go to a node or command</span>
+        <span class="kbd">Ctrl P</span>
+      </button>
+    </div>
+
+    <!-- Two modes, not five. The Explorer is the whole archive; Sections is the
+         simplified workspace the day-to-day editors live in, one list down its
+         left. Cash Shop and Mobs are sections inside it now rather than
+         top-level buttons, so adding Database, Skills and NPCs does not grow
+         this row every time. -->
+    <div class="mode-switch" role="group" aria-label="Editor mode">
+      <button id="mode-explorer" aria-pressed="true" data-tip="Browse and edit any WZ node · Ctrl 1">Explorer</button>
+      <button id="mode-sections" aria-pressed="false" data-tip="Focused editors · Ctrl 2">Editors</button>
+    </div>
+
+    <div class="topbar-actions">
+      <span class="dirty-chip num" id="dirty-chip" data-tip="Unsaved changes — click to review"></span>
+      <span class="divider-v"></span>
+      <button class="btn btn-icon btn-ghost" id="btn-undo" data-tip="Undo · Ctrl Z" aria-label="Undo" disabled></button>
+      <button class="btn btn-icon btn-ghost" id="btn-redo" data-tip="Redo · Ctrl Shift Z" aria-label="Redo" disabled></button>
+      <button class="btn btn-primary" id="btn-save" data-tip="Write changes to disk · Ctrl S" disabled>
+        <span id="save-label">Save</span>
+      </button>
+      <span class="divider-v"></span>
+      <!-- Import lived only on the welcome screen, which is gone the moment
+           anything is open — so the one thing you want *while* editing was the
+           one thing you had to close your work to reach. -->
+      <button class="btn btn-sm btn-ghost topbar-import" id="btn-import"
+              data-tip="Import from another client · Ctrl I" aria-label="Import from another client"></button>
+      <button class="btn btn-sm btn-ghost topbar-import" id="btn-dual" hidden
+              data-tip="Open another client beside this one" aria-label="Open Dual Client View"></button>
+      <button class="btn btn-icon btn-ghost" id="btn-more" data-tip="Theme, shortcuts and more" aria-label="More"></button>
+    </div>
+  </header>
+
+  <!-- ============ WORKSPACE ============ -->
+  <div class="workspace" id="workspace" data-mode="explorer">
+
+    <nav class="rail" aria-label="Panels">
+      <button id="rail-files"   aria-label="Files" aria-pressed="true"  data-tip="Files — again to collapse · Ctrl B" data-tip-placement="right"></button>
+      <!-- Now a tab like its neighbours: search results are a panel that stays
+           open, so this latches instead of opening a dialog that the first
+           click on a result destroyed. -->
+      <button id="rail-search"  aria-label="Find names or values in open archives" aria-pressed="false" data-tip="Find names or values in open archives · Ctrl Shift F" data-tip-placement="right"></button>
+      <button id="rail-pinned"  aria-label="Pinned nodes" aria-pressed="false" data-tip="Pinned nodes · Ctrl D to pin" data-tip-placement="right"></button>
+      <button id="rail-changes" aria-label="Unsaved changes" aria-pressed="false" data-tip="Unsaved changes" data-tip-placement="right"></button>
+      <span class="rail-spacer"></span>
+      <button id="rail-open" aria-label="Open client or archive" data-tip="Open client or archive · Ctrl O" data-tip-placement="right"></button>
+    </nav>
+
+    <!-- ---- SIDE PANEL ---- -->
+    <aside class="surface side-panel" id="tree-pane">
+      <div class="pane-head">
+        <div class="pane-title">
+          <span id="pane-icon" aria-hidden="true"></span>
+          <span id="pane-label">Files</span>
+          <span class="count muted" id="pane-count"></span>
+        </div>
+        <div class="input-wrap">
+          <span id="filter-icon" class="in-icon" aria-hidden="true"></span>
+          <input class="field-input" id="tree-filter" type="search"
+                 placeholder="Filter tree" aria-label="Filter tree" autocomplete="off">
+        </div>
+        <div class="type-chips" id="type-chips"></div>
+      </div>
+      <!-- "Skill.wz and three more files are one archive." Sits above the tree
+           rather than in a toast because it is an offer about what is on the
+           screen underneath it, and because a toast that expires takes the offer
+           with it. One line, whatever the folder holds, and it stays dismissed
+           across reloads; the detail is a sheet the line opens. Empty and hidden
+           whenever there is no family to merge. -->
+      <div id="family-offer" hidden></div>
+      <div class="tree-scroll" id="tree-scroll">
+        <div class="tree-sizer" id="tree-sizer">
+          <div class="tree-rows" id="tree-rows" role="tree" aria-label="WZ file structure"
+               aria-multiselectable="true" tabindex="0"></div>
+        </div>
+        <!-- Pinned and Unsaved changes get their own hosts and are hidden when
+             they are not the chosen panel. They used to render into #tree-rows,
+             which the virtualizer owns: emptying it detached the pool of
+             recycled row elements without the tree knowing, so switching side
+             tabs and back left the file tree blank. Separate hosts also mean a
+             slow renderChanges() landing after the user has moved on paints
+             into something nobody is looking at, instead of over the tree. -->
+        <div id="panel-pinned" hidden></div>
+        <div id="panel-changes" hidden></div>
+        <!-- Search results live here rather than in a modal. A modal is
+             destroyed by the first click on a hit, so working through ten
+             results cost ten searches; as a panel the list survives every
+             navigation. It reuses the rail's existing search slot, so this
+             costs no new persistent chrome. -->
+        <div id="panel-results" hidden></div>
+      </div>
+    </aside>
+
+    <!-- ---- STAGE ---- -->
+    <main class="surface stage" id="main">
+      <div class="breadcrumb" id="breadcrumb"></div>
+      <div class="stage-body" id="child-list"></div>
+    </main>
+
+    <!-- ---- INSPECTOR ---- -->
+    <aside class="surface inspector" id="inspector">
+      <div class="pane-head">
+        <div class="pane-title">
+          <span id="insp-icon" aria-hidden="true"></span>
+          <span>Inspector</span>
+        </div>
+      </div>
+      <div class="inspector-body" id="inspector-body"></div>
+    </aside>
+  </div>
+
+  <!-- ============ STATUS BAR ============ -->
+  <footer class="statusbar">
+    <button class="status-item status-path" id="status-path" data-tip="Copy this path" data-tip-placement="top"></button>
+    <span class="status-spacer"></span>
+    <span class="status-item num" id="status-counts"></span>
+    <span class="status-item" id="status-version"></span>
+    <button class="status-item" id="status-help" data-tip="Keyboard shortcuts · ?" data-tip-placement="top">? shortcuts</button>
+  </footer>
+</div>
+
+<!-- ============ OVERLAYS ============ -->
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<div class="palette" id="palette">
+  <div class="palette-box" role="dialog" aria-label="Command palette">
+    <div class="palette-head">
+      <span id="palette-icon" aria-hidden="true"></span>
+      <input class="palette-input" id="palette-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Go to a node or command">
+    </div>
+    <div class="palette-list" id="palette-list" role="listbox"></div>
+    <div class="palette-foot">
+      <span><span class="kbd">↑↓</span> navigate</span>
+      <span><span class="kbd">↵</span> open</span>
+      <span><span class="kbd">&gt;</span> commands</span>
+      <span><span class="kbd">Esc</span> close</span>
+    </div>
+  </div>
+</div>
+
+<div class="dropzone" id="dropzone">
+  <div class="dropzone-inner">
+    <span id="dropzone-icon" aria-hidden="true"></span>
+    <span>Drop a .wz, .ms or .img to open the file picker</span>
+  </div>
+</div>
+
+<!-- Dialogs are created per call by ui.js modal() and removed on close, so there
+     is no shared <dialog> here any more. A single reused element meant opening a
+     confirm from inside a form cleared the form out from under it. The styling in
+     app.css is element-scoped (`dialog {`), not #modal, so it still applies. -->
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,482 @@
+using MapleLib.WzLib;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace MapleLib.Img
+{
+    /// <summary>
+    /// A WzDirectory-compatible class that represents a filesystem directory.
+    /// Provides the same interface as WzDirectory but loads images from the filesystem.
+    /// This enables seamless integration with existing code that expects WzDirectory.
+    /// </summary>
+    public class VirtualWzDirectory : WzDirectory
+    {
+        #region Fields
+        private readonly ImgFileSystemManager _manager;
+        private readonly string _categoryName;
+        private readonly string _filesystemPath;
+        private readonly string _relativePath;
+
+        private List<WzImage> _images;
+        private List<VirtualWzDirectory> _subDirectories;
+        private bool _subDirsPopulated;
+        private bool _imagesPopulated;
+        #endregion
+
+        #region Properties
+        /// <summary>
+        /// Gets the filesystem path this directory represents
+        /// </summary>
+        public string FilesystemPath => _filesystemPath;
+
+        /// <summary>
+        /// Gets the category name this directory belongs to
+        /// </summary>
+        public string CategoryName => _categoryName;
+
+        /// <summary>
+        /// Gets the relative path within the category
+        /// </summary>
+        public string RelativePath => _relativePath;
+
+        /// <summary>
+        /// VirtualWzDirectory has no WzFile parent - always returns null
+        /// </summary>
+        public override WzLib.WzFile WzFileParent => null;
+        #endregion
+
+        #region Constructor
+        /// <summary>
+        /// Creates a VirtualWzDirectory for a category root
+        /// </summary>
+        internal VirtualWzDirectory(ImgFileSystemManager manager, string categoryName, string filesystemPath)
+            : base(categoryName)
+        {
+            _manager = manager ?? throw new ArgumentNullException(nameof(manager));
+            _categoryName = categoryName;
+            _filesystemPath = filesystemPath;
+            _relativePath = string.Empty;
+        }
+
+        /// <summary>
+        /// Creates a VirtualWzDirectory for a subdirectory
+        /// </summary>
+        internal VirtualWzDirectory(
+            ImgFileSystemManager manager,
+            string categoryName,
+            string filesystemPath,
+            string relativePath,
+            VirtualWzDirectory parent)
+            : base(Path.GetFileName(filesystemPath))
+        {
+            _manager = manager;
+            _categoryName = categoryName;
+            _filesystemPath = filesystemPath;
+            _relativePath = relativePath;
+            this.parent = parent;
+        }
+        #endregion
+
+        #region Directory Population
+        /// <summary>
+        /// Populates subdirectories lazily (without loading images)
+        /// </summary>
+        private void EnsureSubdirectoriesPopulated()
+        {
+            if (_subDirsPopulated)
+                return;
+
+            PopulateSubdirectories();
+            _subDirsPopulated = true;
+        }
+
+        /// <summary>
+        /// Populates lightweight image entries lazily. The .img bytes are not
+        /// opened or parsed until a caller asks for one image by name.
+        /// </summary>
+        private void EnsureImagesPopulated()
+        {
+            if (_imagesPopulated)
+                return;
+
+            PopulateImages();
+            _imagesPopulated = true;
+        }
+
+        /// <summary>
+        /// Populates subdirectories from the filesystem WITHOUT loading .img files.
+        /// </summary>
+        private void PopulateSubdirectories()
+        {
+            _subDirectories = new List<VirtualWzDirectory>();
+
+            if (!Directory.Exists(_filesystemPath))
+                return;
+
+            // Create VirtualWzDirectory for each subdirectory
+            foreach (var dir in Directory.EnumerateDirectories(_filesystemPath))
+            {
+                string dirName = Path.GetFileName(dir);
+                string dirRelativePath = string.IsNullOrEmpty(_relativePath)
+                    ? dirName
+                    : Path.Combine(_relativePath, dirName);
+
+                var subDir = new VirtualWzDirectory(_manager, _categoryName, dir, dirRelativePath, this);
+                _subDirectories.Add(subDir);
+            }
+        }
+
+        /// <summary>
+        /// Populates image names from the filesystem without opening their files.
+        ///
+        /// A category can contain tens of thousands of standalone images. Loading
+        /// every one merely because a tree view enumerated WzImages made mounting
+        /// such a folder both slower and much more memory-hungry than opening the
+        /// equivalent WZ archive. These entries deliberately carry no reader and
+        /// no properties; GetImageByName replaces the entry only for the duration
+        /// of that lookup by returning the manager's parsed, bounded-cache value.
+        /// </summary>
+        private void PopulateImages()
+        {
+            _images = new List<WzImage>();
+
+            if (!Directory.Exists(_filesystemPath))
+                return;
+
+            foreach (var file in Directory.EnumerateFiles(_filesystemPath, "*.img"))
+            {
+                string imageName = Path.GetFileName(file);
+                var entry = new WzImage(imageName)
+                {
+                    Changed = false,
+                    Parsed = false,
+                    Parent = this,
+                };
+                _images.Add(entry);
+            }
+        }
+
+        /// <summary>Loads one indexed image and attaches it to this directory.</summary>
+        private WzImage LoadIndexedImage(WzImage entry)
+        {
+            string imageRelativePath = string.IsNullOrEmpty(_relativePath)
+                ? entry.Name
+                : Path.Combine(_relativePath, entry.Name);
+
+            WzImage image = _manager.LoadImage(_categoryName, imageRelativePath);
+            if (image != null)
+                image.Parent = this;
+            return image;
+        }
+
+        /// <summary>
+        /// Forces a refresh of directory contents
+        /// </summary>
+        public void Refresh()
+        {
+            _subDirsPopulated = false;
+            _imagesPopulated = false;
+            _images?.Clear();
+            _subDirectories?.Clear();
+        }
+
+        /// <summary>
+        /// Removes an image from this directory by name.
+        /// Called when a file is deleted from the filesystem.
+        /// </summary>
+        /// <param name="imageName">The name of the image to remove</param>
+        /// <returns>True if the image was found and removed</returns>
+        public bool RemoveImage(string imageName)
+        {
+            if (_images == null || string.IsNullOrEmpty(imageName))
+                return false;
+
+            var image = _images.FirstOrDefault(img =>
+                img.Name?.Equals(imageName, StringComparison.OrdinalIgnoreCase) == true);
+
+            if (image != null)
+            {
+                _images.Remove(image);
+                image.Dispose();
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Removes an image from this directory by file path.
+        /// Called when a file is deleted from the filesystem.
+        /// </summary>
+        /// <param name="filePath">The full file path of the image to remove</param>
+        /// <returns>True if the image was found and removed</returns>
+        public bool RemoveImageByPath(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+                return false;
+
+            string imageName = Path.GetFileName(filePath);
+            return RemoveImage(imageName);
+        }
+        #endregion
+
+        #region WzDirectory Overrides
+        /// <summary>
+        /// Gets the list of WzImages in this directory
+        /// </summary>
+        public override List<WzImage> WzImages
+        {
+            get
+            {
+                EnsureImagesPopulated();
+                return _images;
+            }
+        }
+
+        /// <summary>
+        /// Gets the list of subdirectories
+        /// </summary>
+        public override List<WzDirectory> WzDirectories
+        {
+            get
+            {
+                EnsureSubdirectoriesPopulated();
+                return _subDirectories.Cast<WzDirectory>().ToList();
+            }
+        }
+
+        /// <summary>
+        /// Gets a WzImage or WzDirectory by name
+        /// </summary>
+        public override WzObject this[string name]
+        {
+            get
+            {
+                EnsureSubdirectoriesPopulated();
+                EnsureImagesPopulated();
+
+                string nameLower = name.ToLower();
+
+                // Check images first. The name entry is cheap; only the matching
+                // file is parsed.
+                foreach (var img in _images)
+                {
+                    if (img.Name.ToLower() == nameLower)
+                        return LoadIndexedImage(img);
+                }
+
+                // Then check subdirectories
+                foreach (var dir in _subDirectories)
+                {
+                    if (dir.Name.ToLower() == nameLower)
+                        return dir;
+                }
+
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Gets an image by name
+        /// </summary>
+        public override WzImage GetImageByName(string name)
+        {
+            EnsureImagesPopulated();
+            string nameLower = name.ToLower();
+            WzImage entry = _images.FirstOrDefault(img => img.Name.ToLower() == nameLower);
+            return entry == null ? null : LoadIndexedImage(entry);
+        }
+
+        /// <summary>
+        /// Gets a subdirectory by name
+        /// </summary>
+        public override WzDirectory GetDirectoryByName(string name)
+        {
+            EnsureSubdirectoriesPopulated();
+            string nameLower = name.ToLower();
+            return _subDirectories.FirstOrDefault(dir => dir.Name.ToLower() == nameLower);
+        }
+
+        /// <summary>
+        /// Counts total images including subdirectories
+        /// </summary>
+        public override int CountImages()
+        {
+            EnsureSubdirectoriesPopulated();
+            EnsureImagesPopulated();
+
+            int count = _images.Count;
+            foreach (var subDir in _subDirectories)
+            {
+                count += subDir.CountImages();
+            }
+            return count;
+        }
+        #endregion
+
+        #region Additional Methods
+        /// <summary>
+        /// Gets all images recursively, including those in subdirectories
+        /// </summary>
+        public IEnumerable<WzImage> GetAllImagesRecursive()
+        {
+            EnsureSubdirectoriesPopulated();
+            EnsureImagesPopulated();
+
+            foreach (var entry in _images)
+            {
+                WzImage image = LoadIndexedImage(entry);
+                if (image != null)
+                    yield return image;
+            }
+
+            foreach (var subDir in _subDirectories)
+            {
+                foreach (var img in subDir.GetAllImagesRecursive())
+                {
+                    yield return img;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Finds an image by relative path within this directory
+        /// </summary>
+        public WzImage FindImage(string relativePath)
+        {
+            string[] parts = relativePath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (parts.Length == 0)
+                return null;
+
+            if (parts.Length == 1)
+            {
+                // Direct child
+                return GetImageByName(parts[0]);
+            }
+
+            // Navigate through subdirectories
+            var currentDir = this;
+            for (int i = 0; i < parts.Length - 1; i++)
+            {
+                var nextDir = currentDir.GetDirectoryByName(parts[i]) as VirtualWzDirectory;
+                if (nextDir == null)
+                    return null;
+                currentDir = nextDir;
+            }
+
+            return currentDir.GetImageByName(parts[parts.Length - 1]);
+        }
+
+        /// <summary>
+        /// Gets the full filesystem path for an image
+        /// </summary>
+        public string GetImageFilePath(string imageName)
+        {
+            if (!imageName.EndsWith(".img", StringComparison.OrdinalIgnoreCase))
+                imageName += ".img";
+
+            return Path.Combine(_filesystemPath, imageName);
+        }
+
+        /// <summary>
+        /// Checks if an image exists in this directory
+        /// </summary>
+        public bool ImageExists(string imageName)
+        {
+            return File.Exists(GetImageFilePath(imageName));
+        }
+
+        /// <summary>
+        /// Gets all subdirectory names
+        /// </summary>
+        public IEnumerable<string> GetSubdirectoryNames()
+        {
+            if (!Directory.Exists(_filesystemPath))
+                return Enumerable.Empty<string>();
+
+            return Directory.EnumerateDirectories(_filesystemPath)
+                           .Select(Path.GetFileName);
+        }
+
+        /// <summary>
+        /// Gets all image names in this directory (not recursive)
+        /// </summary>
+        public IEnumerable<string> GetImageNames()
+        {
+            if (!Directory.Exists(_filesystemPath))
+                return Enumerable.Empty<string>();
+
+            return Directory.EnumerateFiles(_filesystemPath, "*.img")
+                           .Select(Path.GetFileName);
+        }
+        #endregion
+
+        #region Save Methods
+        /// <summary>
+        /// Saves a WzImage to its original location in the filesystem
+        /// </summary>
+        /// <param name="image">The image to save</param>
+        /// <returns>True if saved successfully</returns>
+        public bool SaveImage(WzImage image)
+        {
+            if (image == null || string.IsNullOrEmpty(image.Name))
+                return false;
+
+            string filePath = Path.Combine(_filesystemPath, image.Name);
+            return _manager.SaveImageToFile(image, filePath);
+        }
+
+        /// <summary>
+        /// Saves all changed images in this directory
+        /// </summary>
+        /// <returns>Number of images saved</returns>
+        public int SaveAllChangedImages()
+        {
+            EnsureSubdirectoriesPopulated();
+            EnsureImagesPopulated();
+
+            int savedCount = 0;
+            foreach (var entry in _images)
+            {
+                WzImage image = LoadIndexedImage(entry);
+                if (image == null)
+                    continue;
+                if (image.Changed)
+                {
+                    if (SaveImage(image))
+                    {
+                        savedCount++;
+                    }
+                }
+            }
+
+            // Recursively save subdirectories
+            foreach (var subDir in _subDirectories)
+            {
+                savedCount += subDir.SaveAllChangedImages();
+            }
+
+            return savedCount;
+        }
+
+        /// <summary>
+        /// Gets the ImgFileSystemManager for this directory
+        /// </summary>
+        public ImgFileSystemManager Manager => _manager;
+        #endregion
+
+        #region Dispose
+        public override void Dispose()
+        {
+            _images?.Clear();
+            _subDirectories?.Clear();
+            _images = null;
+            _subDirectories = null;
+            _subDirsPopulated = false;
+            _imagesPopulated = false;
+        }
+        #endregion
+    }
+}
