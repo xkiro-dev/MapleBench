@@ -610,6 +610,14 @@ namespace MapleLib.WzLib
             // inline-or-reference decision in the same order for the block size to
             // match.
             HashSet<string> stringCache = new();
+            List<(WzImage Image, long Offset)> sourceOffsets = new();
+            void RememberOffsets(WzDirectory directory)
+            {
+                foreach (WzImage image in directory.WzImages)
+                    sourceOffsets.Add((image, image.Offset));
+                foreach (WzDirectory child in directory.WzDirectories) RememberOffsets(child);
+            }
+            RememberOffsets(wzDir);
             try
             {
                 File.Create(tempFile).Close();
@@ -618,6 +626,8 @@ namespace MapleLib.WzLib
                     wzDir.GenerateDataFile(bIsWzIvSimilar ? null : WzIv, bIsWzUserKeyDefault, fs, stringCache);
                 }
 
+                // Resolve every offset before creating/truncating the destination.
+                uint totalLen = wzDir.GetImgOffsets(wzDir.GetOffsets(Header.FStart + (!bSaveAs64BitWz ? 2u : 0)));
                 using (WzBinaryWriter wzWriter = new WzBinaryWriter(File.Create(path), WzIv))
                 {
                     wzWriter.Hash = versionHash;
@@ -626,7 +636,6 @@ namespace MapleLib.WzLib
                     // shape this save is producing. See WzBinaryWriter.Is64BitWzFile.
                     wzWriter.Is64BitWzFile = bSaveAs64BitWz;
 
-                    uint totalLen = wzDir.GetImgOffsets(wzDir.GetOffsets(Header.FStart + (!bSaveAs64BitWz ? 2u : 0)));
                     Header.FSize = totalLen - Header.FStart;
                     for (int i = 0; i < 4; i++)
                     {
@@ -654,6 +663,13 @@ namespace MapleLib.WzLib
                     }
                     wzWriter.StringCache.Clear();
                 }
+            }
+            catch
+            {
+                // A failed layout/write must not turn the next retry's source
+                // addresses into the candidate's partially assigned offsets.
+                foreach (var saved in sourceOffsets) saved.Image.Offset = saved.Offset;
+                throw;
             }
             finally
             {

@@ -314,12 +314,13 @@ namespace MapleLib.WzLib.Util
 
         public void WriteOffset(long value)
         {
-            uint encOffset = (uint)BaseStream.Position;
+            uint address = WzSizeLimits.Advance(0, value);
+            uint encOffset = WzSizeLimits.Advance(0, BaseStream.Position);
             encOffset = (encOffset - Header.FStart) ^ 0xFFFFFFFF;
             encOffset *= Hash; // could this be removed? 
             encOffset -= WzAESConstant.WZ_OffsetConstant;
             encOffset = ByteUtils.RotateLeft(encOffset, (byte)(encOffset & 0x1F));
-            uint writeOffset = encOffset ^ ((uint)value - (Header.FStart * 2));
+            uint writeOffset = encOffset ^ (address - (Header.FStart * 2));
             Write(writeOffset);
         }
 

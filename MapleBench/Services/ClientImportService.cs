@@ -36,8 +36,8 @@ public sealed class SplitArchiveDto
     public string? Reason { get; set; }
 
     /// <summary>
-    /// False when this archive is too large to exist as one classic .wz, whatever
-    /// tool builds it. See <see cref="ClientImportService.WzAddressableCeiling"/>.
+    /// False when archive conversion is unsupported. Large archives are partitioned
+    /// into numbered classic WZ files. See <see cref="ClientImportService.WzAddressableCeiling"/>.
     /// Opening it read-only is unaffected — that is the point of the distinction.
     /// </summary>
     public bool Convertible { get; set; } = true;
@@ -78,7 +78,7 @@ public sealed class ImportRequest
     public string SourceFolder { get; set; } = "";
     /// <summary>Archive name as reported by detection — "String", "Mob".</summary>
     public string Archive { get; set; } = "";
-    /// <summary>Where the monolithic .wz goes. Defaults to <c>&lt;OutputFolder&gt;\&lt;Archive&gt;.wz</c>.</summary>
+    /// <summary>Base output path; additional parts use numbered siblings. Defaults to <c>&lt;OutputFolder&gt;\&lt;Archive&gt;.wz</c>.</summary>
     public string? TargetPath { get; set; }
     /// <summary>Used when TargetPath is absent. Required in that case.</summary>
     public string? OutputFolder { get; set; }
@@ -166,6 +166,7 @@ public sealed class ImportResult
     public string Archive { get; set; } = "";
     public string WrittenTo { get; set; } = "";
     public string? BackupPath { get; set; }
+    public List<ImportOutput> Outputs { get; set; } = new();
     public long Bytes { get; set; }
     public long SourceBytes { get; set; }
     public int Images { get; set; }
@@ -180,17 +181,11 @@ public sealed class ImportResult
 }
 
 /// <summary>
-/// Converts a modern split <c>Data\</c> client into the classic one-file-per-archive
-/// layout.
-///
-/// The two layouts differ in packaging, not in content. A split client stores
-/// <c>Data\String\String_000.wz</c>, <c>Data\Mob\_Canvas\_Canvas_003.wz</c> and
-/// <c>Data\Packs\Mob_00002.ms</c> where a classic client stores one
-/// <c>String.wz</c> and one <c>Mob.wz</c>; the WZ images inside are the same
-/// bytes under the same key. So the conversion is a merge of directory trees
-/// followed by one write, not a re-encode — and every image that came from a
-/// .wz part is copied through byte for byte, which is both faster and safer
-/// than round-tripping it.
+/// Converts a modern split Data client into classic numbered WZ families.
+/// Directory paths and image content are preserved across the parts. Unchanged
+/// WZ images can be copied as bytes; .ms images are serialized. Every output is
+/// staged and verified before family publication. This is packaging conversion,
+/// not a guarantee that v232 implements the newer content's game semantics.
 ///
 /// Measured against C:\Nexon\Library\maplestory\appdata on this machine:
 /// String is 1 part and 47 images; Reactor is 1 part plus a 158 MB _Canvas
@@ -212,9 +207,8 @@ public sealed class ImportResult
 ///     carries <c>_outlink = "Mob/_Canvas/0100007.img/info/thumbnail"</c>, which
 ///     is a path from the archive root through a <c>_Canvas</c> directory. Keeping
 ///     <c>_Canvas</c> as a sub-directory of the output archive therefore leaves
-///     every link resolving exactly as it did — and resolving inside one file
-///     rather than across two. No link is rewritten, so no link can be rewritten
-///     wrongly.
+///     the logical paths intact across the output family. No link is rewritten;
+///     native family mounting and newer canvas semantics still need client tests.
 ///
 ///  3. <b>Image bytes are position-independent.</b> The version hash is consumed
 ///     only by <c>WzDirectory.ParseDirectory</c> via <c>ReadOffset</c>; nothing
@@ -224,7 +218,7 @@ public sealed class ImportResult
 ///     64-bit shape the classic client uses while the source parts carry a
 ///     version header.
 /// </summary>
-public sealed class ClientImportService
+public sealed partial class ClientImportService
 {
     /// <summary>
     /// The patch version stamped on the output.
@@ -283,19 +277,7 @@ public sealed class ClientImportService
     /// fit the client ships Map.wz, Map001.wz, Map002.wz and Map2.wz rather than
     /// one big file.
     /// </summary>
-    public const long WzAddressableCeiling = uint.MaxValue;
-
-    /// <summary>
-    /// How close to <see cref="WzAddressableCeiling"/> an archive may come before
-    /// this refuses it.
-    ///
-    /// Ninety-five percent, because the estimate is the source size and the output
-    /// is not exactly it — .ms-sourced images are re-serialised and can grow. An
-    /// archive at 4.2 GB of source that came out at 4.1 GB would be a file the
-    /// game cannot load, produced by a run that reported success, and the only
-    /// warning would have been that it was close.
-    /// </summary>
-    private const double CeilingMargin = 0.95;
+    public const long WzAddressableCeiling = WzSizeLimits.MaximumFileBytes;
 
     /// <summary>
     /// The archives this importer refuses outright, and why.
@@ -464,9 +446,9 @@ public sealed class ClientImportService
 
             archive.SourceBytes = MeasureArchive(dir) + MeasurePacks(dataDirectory, name, archive.Packs);
             archive.Supported = !Unsupported.Contains(name);
-            archive.ConvertReason = TooBigToConvert(archive.SourceBytes);
-            archive.Convertible = archive.Supported && archive.ConvertReason == null;
-            archive.ConvertSummary = archive.Convertible ? null : "too big for one .wz";
+            archive.ConvertReason = null;
+            archive.Convertible = archive.Supported;
+            archive.ConvertSummary = archive.SourceBytes >= WzSizeLimits.PlanningFileBytes ? "writes numbered WZ files" : null;
 
             // The free-space caution is suppressed once converting is impossible.
             // "About 13 GB. That much free space is needed on the target drive" is
@@ -479,34 +461,6 @@ public sealed class ClientImportService
         }
 
         return archives.OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
-    }
-
-    /// <summary>
-    /// A caution the user should read before starting, or null.
-    ///
-    /// The only one that exists is size: the output is written whole before it is
-    /// verified, so a 13 GB Mob needs 13 GB free on the target volume plus room
-    /// for the images that get re-serialised. Saying so up front is cheaper than
-    /// a disk-full failure ninety minutes in.
-    /// </summary>
-    /// <summary>
-    /// Why this archive cannot become one classic .wz, or null when it can.
-    ///
-    /// Measured against the source size, which the conversions run on this client
-    /// show to be the output size within a fraction of a percent — Effect's
-    /// 7,184,266,020 source bytes produced 7,184,260,534.
-    /// </summary>
-    private static string? TooBigToConvert(long sourceBytes)
-    {
-        if (sourceBytes < WzAddressableCeiling * CeilingMargin)
-            return null;
-
-        return $"{Bytes(sourceBytes)} cannot be one .wz file. Every image in a WZ archive is located by a " +
-               "four-byte offset, so nothing past 4 GB has an address — the archive would be written in full " +
-               "and then be unable to find its own second half. This is the WZ format, not a limit of this " +
-               "app, and it is why the classic client ships Map.wz, Map001.wz and Map002.wz instead of one " +
-               "file. Open it for reference instead: that merges the same tree in memory, takes seconds, " +
-               "needs no disk, and you can port out of it.";
     }
 
     private static string? ArchiveNote(SplitArchiveDto archive)
@@ -712,7 +666,7 @@ public sealed class ClientImportService
     #region Import
 
     /// <summary>
-    /// Merges one split archive into a single classic .wz and proves the result
+    /// Converts a split archive into a classic WZ family and verifies every part
     /// before putting it anywhere the user will find it.
     ///
     /// The order is deliberate and matches <see cref="WzSaveService"/>: assemble,
@@ -751,8 +705,6 @@ public sealed class ClientImportService
         if (!archive.Supported)
             throw new InvalidOperationException($"{archive.Name}: {archive.Reason}");
 
-        // Before the destination is resolved, before a byte is read, and before
-        // any of it is the user's time. See WzAddressableCeiling.
         if (!archive.Convertible)
             throw new InvalidOperationException($"{archive.Name}: {archive.ConvertReason}");
 
@@ -781,7 +733,14 @@ public sealed class ClientImportService
         // Etc's 1,534,945,770 source bytes produced 1,534,939,246). Ten percent of
         // headroom covers the .ms archives, whose images are re-serialised rather
         // than copied and so can differ by more.
-        long needed = archive.SourceBytes + archive.SourceBytes / 10;
+        long scratchNeeded = Math.Min(archive.SourceBytes, WzAddressableCeiling);
+        long needed = checked(archive.SourceBytes + archive.SourceBytes / 10 + scratchNeeded);
+        // The serializer's scratch file lives in the process working folder.
+        // Check that volume separately too; when it is the destination volume,
+        // the aggregate above accounts for the concurrent files.
+        DriveInfo scratchDrive = new(Path.GetPathRoot(Path.GetFullPath(Environment.CurrentDirectory))!);
+        if (scratchDrive.IsReady && scratchDrive.AvailableFreeSpace < scratchNeeded)
+            throw new IOException($"The serializer scratch volume needs about {Bytes(scratchNeeded)} free.");
 
         // Plus whatever the session is already holding, when the target volume is
         // the one those archives would be saved back to.
@@ -820,113 +779,10 @@ public sealed class ClientImportService
         // Assembled by the same call the read-only open uses, so the tree that
         // gets written is the tree a user would have browsed. See Assemble.
         AssembledArchive assembled = Assemble(layout, archive.Name, report, cancel);
-        WzFile output = assembled.File;
-        List<string> warnings = assembled.Warnings;
-        int images = assembled.Images;
 
         try
         {
-            Inventory expected = TakeInventory(output.WzDirectory);
-
-            // A directory whose contents pass int.MaxValue cannot have its size
-            // recorded in a WZ entry -- the field is a compressed int. The archive
-            // is written correctly regardless (the size is saturated, and nothing
-            // reading a WZ navigates by it), and verification below reopens it and
-            // proves that. What cannot be proven from here is what the game does
-            // with a directory bigger than any it ships: measured, the largest
-            // single directory in the user's own classic client is well under
-            // 2 GB, and the client splits Map.wz into Map/Map001/Map002 rather
-            // than exceed it. So this is said out loud rather than assumed away.
-            foreach (string oversize in OversizeDirectories(output.WzDirectory))
-                warnings.Add(oversize);
-
-            report($"Reading a sample of {images:N0} images to compare against afterwards", 0, images);
-            Dictionary<string, string> sampled = Sample(
-                output.WzDirectory, expected, request.SampleSize ?? DefaultSampleSize);
-
-            // Same volume as the destination so the swap at the end is a rename.
-            // The stem is unique because MapleLib's SaveToDisk derives its own
-            // scratch name from the file name and drops it in the working
-            // directory: two imports of the same archive would otherwise share
-            // one ".String.TEMP" and truncate each other.
-            string temp = Path.Combine(directory, $"mbimport-{Guid.NewGuid():N}.wz");
-
-            report($"Writing {images:N0} images to {Path.GetFileName(destination)}", 0, images);
-            try
-            {
-                output.SaveToDisk(temp, save64Bit, WzMapleVersion.BMS);
-            }
-            catch
-            {
-                TryDelete(temp);
-                throw;
-            }
-
-            long bytes = File.Exists(temp) ? new FileInfo(temp).Length : 0;
-            if (bytes == 0)
-            {
-                TryDelete(temp);
-                throw new InvalidOperationException(
-                    $"{archive.Name} serialised to zero bytes. Nothing was written.");
-            }
-
-            report($"Reopening {Bytes(bytes)} and checking it against the source", images, images);
-            List<string> defects;
-            try
-            {
-                defects = Verify(temp, expected, sampled, save64Bit);
-            }
-            catch (Exception ex)
-            {
-                TryDelete(temp);
-                throw new InvalidOperationException(
-                    $"The converted {archive.Name}.wz could not be read back, so nothing was written to " +
-                    $"'{destination}'.\n\nDetail: {ex.Message}", ex);
-            }
-
-            if (defects.Count > 0)
-            {
-                // Kept, not deleted. It is up to an hour of work and the user may
-                // want to look at it; what it must not be is silently installed.
-                string rescued = Path.Combine(directory,
-                    $"{archive.Name}.rejected-{DateTime.Now:yyyyMMdd-HHmmss}.wz");
-                TryMove(temp, rescued);
-                throw new InvalidOperationException(
-                    $"The converted {archive.Name}.wz does not match the client it came from, so nothing was " +
-                    $"written to '{destination}':\n" +
-                    string.Join("\n", defects.Select(d => "  - " + d)) +
-                    $"\n\nThe rejected file is kept at:\n{rescued}");
-            }
-
-            string? backup = null;
-            if (File.Exists(destination))
-            {
-                backup = $"{destination}.{DateTime.Now:yyyyMMdd-HHmmss}.bak";
-                File.Replace(temp, destination, backup, ignoreMetadataErrors: true);
-            }
-            else
-            {
-                File.Move(temp, destination);
-            }
-
-            _log.LogInformation("Imported {Archive} from {Source} to {Destination} ({Bytes} bytes, {Images} images)",
-                archive.Name, archive.Path, destination, bytes, images);
-
-            return new ImportResult
-            {
-                Archive = archive.Name,
-                WrittenTo = destination,
-                BackupPath = backup,
-                Bytes = bytes,
-                SourceBytes = archive.SourceBytes,
-                Images = images,
-                Directories = assembled.Directories,
-                ImagesReserialised = assembled.ImagesReserialised,
-                SourceFilesRead = assembled.SourceFilesRead,
-                Sampled = sampled.Count,
-                Seconds = clock.Elapsed.TotalSeconds,
-                Warnings = warnings,
-            };
+            return WriteFamily(assembled, destination, request, save64Bit, clock, report, cancel);
         }
         finally
         {
@@ -934,40 +790,6 @@ public sealed class ClientImportService
             // bytes straight off their readers -- which is why this is here and
             // not around the assembly. AssembledArchive.Dispose knows the order.
             assembled.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// Names any directory in the tree whose images total more than a WZ entry's
-    /// size field can hold, with what it came to.
-    ///
-    /// Measured by summing block sizes rather than by asking the writer, because
-    /// the writer only knows after it has written. The sum is exact for the images
-    /// that are copied through and an underestimate for the ones re-serialised out
-    /// of .ms packs, which is the right direction to be wrong in: it never invents
-    /// a warning, it can only miss one that is marginal.
-    /// </summary>
-    private static IEnumerable<string> OversizeDirectories(WzDirectory root)
-    {
-        List<string> found = new();
-        Measure(root);
-        return found;
-
-        long Measure(WzDirectory dir)
-        {
-            long total = dir.WzImages.Sum(i => (long)i.BlockSize);
-            foreach (WzDirectory sub in dir.WzDirectories)
-                total += Measure(sub);
-
-            if (total > int.MaxValue)
-            {
-                found.Add(
-                    $"'{StripRoot(dir.FullPath)}' holds {Bytes(total)}, which is more than the size field of a " +
-                    "WZ directory entry can express. The archive is written and verified correctly — nothing " +
-                    "that reads a WZ navigates by that number — but no classic client ships a directory this " +
-                    "big, so whether the game accepts it is untested.");
-            }
-            return total;
         }
     }
 

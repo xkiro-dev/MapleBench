@@ -569,7 +569,7 @@ namespace MapleLib.WzLib
         }
         internal void SaveDirectory(WzBinaryWriter writer)
         {
-            offset = (uint)writer.BaseStream.Position;
+            offset = WzSizeLimits.Advance(0, writer.BaseStream.Position);
             int entryCount = subDirs.Count + images.Count;
             if (entryCount == 0)
             {
@@ -615,7 +615,7 @@ namespace MapleLib.WzLib
         internal uint GetOffsets(uint curOffset)
         {
             offset = curOffset;
-            curOffset += (uint)offsetSize;
+            curOffset = WzSizeLimits.Advance(curOffset, offsetSize);
             foreach (WzDirectory dir in subDirs)
             {
                 curOffset = dir.GetOffsets(curOffset);
@@ -627,7 +627,7 @@ namespace MapleLib.WzLib
             foreach (WzImage img in images)
             {
                 img.Offset = curOffset;
-                curOffset += (uint)img.BlockSize;
+                curOffset = WzSizeLimits.Advance(curOffset, img.BlockSize);
             }
             foreach (WzDirectory dir in subDirs)
             {

@@ -1344,71 +1344,83 @@ public sealed class PortService
             .ToList();
     }
 
-    /// <summary>
-    /// The archive in the target client that matches the one this entry came out
-    /// of, or the chosen target when there is no match.
-    ///
-    /// Matched on the family stem, so Mob001.wz answers for Mob.wz -- a client
-    /// splits one family across numbered siblings and which sibling a given id
-    /// sits in is that client's business, not something to preserve.
-    ///
-    /// When the family has more than one writable archive, the entry lands
-    /// beside the target's own population of this kind, not in whichever archive
-    /// happened to be first. That is a measured rule, not a taste: the real v232
-    /// client keeps all 17,442 of its maps in Map002.wz, and "first writable of
-    /// the family" put a ported map into Map.wz — fragmenting the family and
-    /// pushing a 1.6 GB file toward the 4 GB WZ ceiling. Only when no archive of
-    /// the family holds any entries of the kind does first-writable remain the
-    /// answer, because then there is no population to land beside.
-    ///
-    /// <paramref name="disclosure"/> names the choice whenever there was one —
-    /// more than one candidate — so the plan says where the entry goes and why
-    /// rather than leaving it to be discovered in the saved file.
-    /// </summary>
+    // Accessed only under the session gate; replaced for every preview/apply.
+    private Dictionary<string, long> _placementBytes = new(StringComparer.Ordinal);
+
+    private OpenFile? AllocateArchive(List<OpenFile> candidates, long bytes)
+    {
+        foreach (OpenFile file in candidates.Where(f => f.WzFile != null))
+            if (!_placementBytes.ContainsKey(file.Id))
+                _placementBytes[file.Id] = ArchiveCapacity.Estimate(file.WzFile.WzDirectory);
+        OpenFile? home = candidates.Where(f => !f.ReadOnly && f.WzFile != null
+                && bytes <= WzSizeLimits.PlanningFileBytes - _placementBytes[f.Id])
+            .OrderBy(f => _placementBytes[f.Id]).ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+        if (home != null) _placementBytes[home.Id] += bytes;
+        return home;
+    }
+
+    /// <summary>Keep existing entries in their owner; place new whole images by
+    /// projected family capacity. Shared image containers remain indivisible.</summary>
     private OpenFile ArchiveFor(
         EntryLocation entry, PortKindSpec spec, ClientGroup? targetClient, OpenFile fallback,
+        Dictionary<string, OpenFile> containerHomes,
         out string? disclosure)
     {
         disclosure = null;
-        if (targetClient == null)
-            return fallback;
-
         string family = WzSessionService.StripArchiveSuffix(entry.File.Name);
-        List<OpenFile> candidates = targetClient.Files
-            .Where(f => !f.ReadOnly
-                     && WzSessionService.StripArchiveSuffix(f.Name)
-                            .Equals(family, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
+        List<OpenFile> candidates = (targetClient?.Files ?? new List<OpenFile> { fallback })
+            .Where(f => f.WzFile != null && WzSessionService.StripArchiveSuffix(f.Name)
+                .Equals(family, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList();
         if (candidates.Count == 0)
-            return fallback;
-        if (candidates.Count == 1)
-            return candidates[0];
+            throw new InvalidOperationException($"Open the target client's {family} WZ family first.");
 
-        // The population question, asked of the same index every conflict check
-        // reads, so "where the target keeps this kind" and "does the target
-        // already have this id" cannot come apart.
-        (OpenFile File, int Count) populated = candidates
-            .Select(f => (File: f, Count: Index(f, spec).Count))
-            .OrderByDescending(x => x.Count)
-            .ThenBy(x => x.File.Name, StringComparer.OrdinalIgnoreCase)
-            .First();
-
-        if (populated.Count > 0)
+        // Search ALL siblings before choosing space. Otherwise an existing ID in
+        // Mob001 becomes a duplicate in Mob.wz instead of an overwrite conflict.
+        List<OpenFile> owners = candidates.Where(f => entry.Id > 0
+            ? Index(f, spec).Get(entry.Scope, entry.Id) != null
+            : _session.TryResolve(WzPath.Child(entry.Steps.Aggregate(f.Id,
+                (path, step) => WzPath.Child(path, step.Name)), entry.Name)) != null).ToList();
+        if (owners.Count > 1)
+            throw new InvalidOperationException($"{entry.Relative} exists in multiple target archives: " +
+                string.Join(", ", owners.Select(f => f.Name)) + ". Resolve the duplicate before importing.");
+        if (owners.Count == 1)
         {
-            disclosure =
-                $"Lands in {populated.File.Name}: the {family} family has {candidates.Count} writable "
-                + $"archives here, and that is the one {targetClient.Label} keeps its "
-                + $"{spec.Plural.ToLowerInvariant()} in ({populated.Count:N0} of them).";
-            return populated.File;
+            if (owners[0].ReadOnly)
+                throw new InvalidOperationException($"{entry.Relative} belongs to reference-only {owners[0].Name}. Unlock it first.");
+            disclosure = $"Keeps the existing entry in {owners[0].Name}.";
+            return owners[0];
         }
 
-        OpenFile first = candidates[0];
-        disclosure =
-            $"Lands in {first.Name}, the first writable archive of the {family} family: no archive of "
-            + $"it holds any {spec.Plural.ToLowerInvariant()} yet, so there is no population to land "
-            + "beside.";
-        return first;
+        // Properties in a shared .img must stay together; only whole images can
+        // be spread across physical files. Remember new containers in this plan.
+        int imageStep = entry.Steps.ToList().FindIndex(step => step.Type == "Image");
+        string? container = imageStep < 0 ? null : string.Join("/", entry.Steps.Take(imageStep + 1).Select(s => s.Name));
+        if (container != null)
+        {
+            string key = family + "/" + container;
+            if (containerHomes.TryGetValue(key, out OpenFile? planned))
+                return planned;
+            OpenFile? owner = candidates.FirstOrDefault(f => _session.TryResolve(
+                entry.Steps.Take(imageStep + 1).Aggregate(f.Id, (path, step) => WzPath.Child(path, step.Name))) != null);
+            if (owner != null)
+            {
+                if (owner.ReadOnly)
+                    throw new InvalidOperationException($"{container} belongs to reference-only {owner.Name}.");
+                containerHomes[key] = owner;
+                return owner;
+            }
+        }
+
+        long bytes = Math.Max(entry.Bytes, 4096);
+        OpenFile? home = AllocateArchive(candidates, bytes);
+        if (home == null)
+            throw new InvalidOperationException($"The open {family} files have no room for {entry.Relative} below the 4 GiB limit. " +
+                "Open another writable numbered sibling, or use split archive conversion into a separate folder.");
+        if (container != null)
+            containerHomes[family + "/" + container] = home;
+        disclosure = $"Lands in {home.Name}: the {family} family is balanced by estimated bytes, including this import.";
+        return home;
     }
 
     /// <summary>
@@ -1939,6 +1951,32 @@ public sealed class PortService
                 }
             }
 
+            if (bulk)
+            {
+                if (request.BatchSize < 1 || request.BatchSize > 200)
+                    throw new InvalidOperationException("Batch size must be between 1 and 200 entries.");
+                requested = requested.OrderBy(e => e.Id).ThenBy(e => e.Path, StringComparer.Ordinal).ToList();
+                plan.TotalSourceEntries = requested.Count;
+                if (request.BatchOffset < 0 || request.BatchOffset >= requested.Count)
+                    throw new InvalidOperationException("The import batch cursor is outside the source. Start the import again.");
+                plan.BatchOffset = request.BatchOffset;
+                List<EntryLocation> batch = new();
+                long batchBytes = 0;
+                foreach (EntryLocation entry in requested.Skip(request.BatchOffset))
+                {
+                    if (batch.Count > 0 && (batch.Count >= request.BatchSize || batchBytes + entry.Bytes > 256L * 1024 * 1024))
+                        break;
+                    batch.Add(entry);
+                    batchBytes += entry.Bytes;
+                }
+                plan.BatchEntries = batch.Count;
+                int next = request.BatchOffset + batch.Count;
+                plan.NextBatchOffset = next < requested.Count ? next : null;
+                requested = batch;
+                plan.Warnings.Add($"Batch {request.BatchOffset + 1:N0}–{next:N0} of {plan.TotalSourceEntries:N0}. " +
+                    "Dependencies are checked for every batch. Save affected archives between batches to release undo memory.");
+            }
+
             HashSet<string> sourceFiles = requested.Select(e => e.File.Id).ToHashSet(StringComparer.Ordinal);
             List<ClientGroup> sourceGroups = groups
                 .Where(g => g.Files.Any(f => sourceFiles.Contains(f.Id)))
@@ -2004,6 +2042,8 @@ public sealed class PortService
             /* ---------------- collect, links included ---------------- */
 
             EntryIndex targetIndex = Index(target, spec);
+            _placementBytes = new(StringComparer.Ordinal);
+            Dictionary<string, OpenFile> containerHomes = new(StringComparer.OrdinalIgnoreCase);
             EntryIndex? sourceIndex = null;
 
             // Built only when something needs it: link following and the boss-part
@@ -2196,7 +2236,7 @@ public sealed class PortService
                 // no client will ever read, reported as a clean New. Mirroring
                 // the source's archive family is the same rule that already
                 // decides the directories below it.
-                OpenFile home = ArchiveFor(entry, spec, targetClient, target, out string? archiveChoice);
+                OpenFile home = ArchiveFor(entry, spec, targetClient, target, containerHomes, out string? archiveChoice);
                 EntryIndex homeIndex =
                     ReferenceEquals(home, target) ? targetIndex : Index(home, spec);
 
@@ -2647,8 +2687,8 @@ public sealed class PortService
             {
                 plan.Blocked = true;
                 plan.BlockedReason =
-                    $"This archive holds about {Megabytes(plan.Totals.Bytes)} of {spec.Plural.ToLowerInvariant()}, " +
-                    $"and a whole-archive port is capped at {Megabytes(MaxArchiveBytes)}. The cap is memory, " +
+                    $"This batch carries about {Megabytes(plan.Totals.Bytes)} of {spec.Plural.ToLowerInvariant()}, " +
+                    $"and one import batch is capped at {Megabytes(MaxArchiveBytes)}. The cap is memory, " +
                     "not policy: the single undo entry holds a full in-memory clone of everything it copied " +
                     "and the parsed originals stay resident beside it, so this would need roughly " +
                     // Three, not two: a whole Npc.wz of 1,006 MB measured 2.89 GB
@@ -2657,6 +2697,31 @@ public sealed class PortService
                     $"{Megabytes(plan.Totals.Bytes * 3)} on top of the two clients you already have open. " +
                     "Port the ones you need with the selection scope instead — refusing here is better than " +
                     "starting and dying halfway through.";
+                return Done(plan, clock, written, failed, needsDecision);
+            }
+
+            // Include every planned satellite and carried image in capacity
+            // admission, not only the primary entry's allocation estimate.
+            Dictionary<string, long> projected = new(StringComparer.Ordinal);
+            foreach (PortPartDto part in DistinctParts(items).Where(p => p.WillWrite && p.TargetPath != null))
+            {
+                OpenFile file = _session.GetFile(WzPath.FileId(part.TargetPath!));
+                if (file.WzFile == null) continue;
+                if (!projected.ContainsKey(file.Id)) projected[file.Id] = ArchiveCapacity.Estimate(file.WzFile.WzDirectory);
+                WzObject? capacitySource = part.SourcePath == null ? null : _session.TryResolve(part.SourcePath);
+                WzObject? existing = _session.TryResolve(part.TargetPath!);
+                long growth = capacitySource is WzImage image ? ArchiveCapacity.ImageBytes(image)
+                    : Math.Max(part.Bytes, 1024);
+                if (existing is WzImage old) growth -= old.BlockSize;
+                projected[file.Id] = checked(projected[file.Id] + Math.Max(0, growth));
+            }
+            foreach ((string id, long size) in projected)
+            {
+                if (size <= WzSizeLimits.PlanningFileBytes) continue;
+                plan.Blocked = true;
+                plan.BlockedReason = $"{_session.GetFile(id).Name} would need about {Megabytes(size)}, " +
+                    "including dependencies. It does not fit below the 4 GiB WZ limit with serialization headroom. " +
+                    "Open more writable siblings or reduce this batch; existing shared images cannot be split across files.";
                 return Done(plan, clock, written, failed, needsDecision);
             }
 
@@ -6442,7 +6507,7 @@ public sealed class PortService
         string cursor;
         int from;
 
-        if (inTarget is { Resolved: > 0 })
+        if (inTarget is { Resolved: > 0 } && inTarget.Node is not WzDirectory)
         {
             home = inTarget.File;
             cursor = inTarget.Path;
@@ -6450,11 +6515,12 @@ public sealed class PortService
         }
         else
         {
-            OpenFile? writable = targetArchives.FirstOrDefault(f => !f.ReadOnly);
+            OpenFile? writable = AllocateArchive(targetArchives,
+                inSource.Node is WzImage capacityImage ? ArchiveCapacity.ImageBytes(capacityImage) : 4096);
             if (writable == null)
             {
                 blocked = string.Join(" -> ", chain)
-                        + $" — no writable {Capitalise(edge.Role)}.wz to carry it into";
+                        + $" — no writable {Capitalise(edge.Role)}.wz with capacity below 4 GiB to carry it into";
                 return false;
             }
             home = writable;
@@ -6472,6 +6538,7 @@ public sealed class PortService
         for (int i = from; i < segments.Length - 1; i++)
         {
             cursor = WzPath.Child(cursor, segments[i]);
+            if (_session.TryResolve(cursor) != null) continue;
             string type = i < inSource.Steps.Count ? inSource.Steps[i].Type : "SubProperty";
             decision.Levels.Add(Container(
                 cursor, new PathStep(segments[i], type),
@@ -6540,7 +6607,7 @@ public sealed class PortService
         string cursor;
         int from;
 
-        if (inTarget is { Resolved: > 0 })
+        if (inTarget is { Resolved: > 0 } && inTarget.Node is not WzDirectory)
         {
             home = inTarget.File;
             cursor = inTarget.Path;
@@ -6548,14 +6615,15 @@ public sealed class PortService
         }
         else
         {
-            OpenFile? writable = targetArchives.FirstOrDefault(f => !f.ReadOnly);
+            OpenFile? writable = AllocateArchive(targetArchives,
+                inSource.Node is WzImage capacityImage ? ArchiveCapacity.ImageBytes(capacityImage) : 4096);
             if (writable == null)
             {
                 part.Status = "Blocked";
                 part.Reason = targetArchives.Count == 0
                     ? $"{targetClient.Label} has no {Capitalise(edge.Role)}.wz open, so there is nowhere to "
                       + $"put this {edge.What}. Open it and preview again."
-                    : $"Every {Capitalise(edge.Role)}.wz {targetClient.Label} has open is reference-only, so "
+                    : $"No open {Capitalise(edge.Role)}.wz in {targetClient.Label} is writable with capacity below 4 GiB, so "
                       + $"this {edge.What} cannot be written. Unlock one in the Files panel.";
                 return;
             }
@@ -6581,6 +6649,7 @@ public sealed class PortService
         for (int i = from; i < segments.Length - 1; i++)
         {
             cursor = WzPath.Child(cursor, segments[i]);
+            if (_session.TryResolve(cursor) != null) continue;
             string type = i < inSource.Steps.Count ? inSource.Steps[i].Type : "SubProperty";
             creates.Add(segments[i]);
             made.Add(Container(
@@ -8772,7 +8841,7 @@ public sealed class PortService
             {
                 into.TryAdd(new EntryLocation(
                     imageId, file, imagePath, image, steps, image.Name,
-                    Relative(steps, image.Name), image.BlockSize));
+                    Relative(steps, image.Name), ArchiveCapacity.ImageBytes(image)));
                 continue;
             }
 
@@ -8822,7 +8891,7 @@ public sealed class PortService
             // for every kind but String.wz, and the image's own name for that one.
             string scope = spec.IdsAreUniquePerImage ? Relative(steps, image.Name) : "";
 
-            Inside(file, spec, level, inside, levelPath, into, image.BlockSize, scope, 1);
+            Inside(file, spec, level, inside, levelPath, into, ArchiveCapacity.ImageBytes(image), scope, 1);
         }
     }
 
@@ -9306,18 +9375,9 @@ public sealed class PortService
             "differ, so a clean preview here is not a promise that the client will read every field.";
 
         if (bulk)
-        {
-            yield return
-                $"Past {MaxParsedEntries} entries nothing is parsed to check it: art links, icon links and " +
-                "the 'takes its art from another id' check are all skipped, because they cost a full parse " +
-                "of every entry — ten seconds for a Mob.wz, and that is per preview. Under that count they " +
-                "are followed exactly as for a hand-picked selection, so a folder of a few hundred equips " +
-                "still carries everything it points at.";
-            yield return
-                $"The check that refuses a port whose canvas links the target cannot follow reads those same " +
-                $"parsed links, so past {MaxParsedEntries} entries it cannot fire either. At this scale the " +
-                "links are reported after the fact instead, against the archive as it then stands.";
-        }
+            yield return "Archive and folder imports use bounded batches with dependency scanning enabled. " +
+                "Review each batch, save affected archives, then continue with the next batch.";
+
     }
 
     /// <summary>

@@ -240,6 +240,11 @@ public sealed class PortTotalsDto
 
 public sealed class PortPlanDto
 {
+    public int BatchOffset { get; set; }
+    public int BatchEntries { get; set; }
+    public int TotalSourceEntries { get; set; }
+    public int? NextBatchOffset { get; set; }
+
     public string Kind { get; set; } = "";
     public string Label { get; set; } = "";
 
@@ -406,6 +411,10 @@ public sealed class PortSuggestionDto
 
 public class PortPlanRequest
 {
+    public int BatchSize { get; set; } = 200;
+    /// <summary>Archive/folder cursor. Each batch is separately reviewed and undoable.</summary>
+    public int BatchOffset { get; set; }
+
     public string Kind { get; set; } = "mob";
 
     /// <summary>

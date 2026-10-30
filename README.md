@@ -16,6 +16,12 @@ Made by Kiro.
 - Import selected content from classic WZ or split Data clients after reviewing its names, effects, sounds, set data, and referenced art.
 - Save through a temporary candidate file that is flushed, reopened, and verified before it replaces the destination.
 
+## Large imports into Daruma v232
+
+New images are distributed across writable WZ siblings instead of concentrating in one file; existing entries stay in their original archive. Each WZ supports Daruma's unsigned 4 GiB address range, with headroom during import planning.
+
+Whole-archive imports now use reviewed batches with dependency checks. Use **Save changes…** and **Preview next batch** in the import dialog; choose a smaller batch for content with many dependencies. The split archive converter can also produce numbered output files. See [capacity, workflow and validation details](docs/import-capacity.md).
+
 ## Requirements
 
 - Windows 10 or Windows 11

@@ -832,8 +832,33 @@ function buildDialog({
 
   const previewHost = el('div', { class: 'port-preview-host' });
   let plan = null;
+  let batchOffset = 0;
+  let nextBatchOffset = null;
 
+  const batchSize = el('select', { class: 'field-input', 'aria-label': 'Entries per import batch' },
+    ...[25, 50, 100, 200].map(size => el('option', { value: String(size), selected: size === 200, text: `${size} entries per batch` })));
+  batchSize.addEventListener('change', () => {
+    plan = null;
+    nextBatchOffset = null;
+    nextBatchButton.disabled = true;
+    applyButton.disabled = true;
+    clear(previewHost);
+  });
   const previewButton = el('button', { class: 'btn' }, icon('eye', { size: 15 }), 'Preview import');
+  const saveBatchButton = el('button', { class: 'btn' }, 'Save changes…');
+  saveBatchButton.addEventListener('click', async () => {
+    if (busy) return;
+    await app.refreshFiles();
+    await app.save();
+  });
+  const nextBatchButton = el('button', { class: 'btn', disabled: true }, 'Preview next batch');
+  nextBatchButton.addEventListener('click', () => run(async () => {
+    if (nextBatchOffset == null || app.saveBusy()) return;
+    batchOffset = nextBatchOffset;
+    nextBatchOffset = null;
+    nextBatchButton.disabled = true;
+    await preview();
+  }));
   const applyButton = el('button', {
     class: 'btn btn-primary', disabled: true,
     'data-tip': 'Preview first — nothing is written until you have seen what it would do',
@@ -848,6 +873,9 @@ function buildDialog({
    */
   const invalidate = () => {
     plan = null;
+    batchOffset = 0;
+    nextBatchOffset = null;
+    nextBatchButton.disabled = true;
     applyButton.disabled = true;
     clear(previewHost);
     previewHost.append(el('div', { class: 'port-empty' },
@@ -891,6 +919,8 @@ function buildDialog({
     // folders -- would send a folder port with nothing to port.
     paths: scope === 'archive' ? [] : paths,
     sourceFileId: scope === 'selection' ? null : sourceFileId,
+    batchOffset,
+    batchSize: Number(batchSize.value),
     targetFileId: targetSelect.value,
     followLinks: true,
     includeArtOutlinks: true,
@@ -942,9 +972,10 @@ function buildDialog({
     // each other, and an apply issued twice would port twice.
     if (busy) return;
     busy = true;
+    batchSize.disabled = true;
     previewButton.disabled = true;
     applyButton.disabled = true;
-    try { await fn(); } finally { busy = false; previewButton.disabled = false; }
+    try { await fn(); } finally { busy = false; batchSize.disabled = false; previewButton.disabled = false; }
   };
 
   /**
@@ -954,6 +985,8 @@ function buildDialog({
    * write something nobody has seen. See acceptDeadLinks.
    */
   const preview = async () => {
+    nextBatchOffset = null;
+    nextBatchButton.disabled = true;
     if (!targetSelect.value) {
       toast('There is no other client open with a writable archive to import into.', 'warning');
       return;
@@ -961,6 +994,9 @@ function buildDialog({
     const stop = working('Working out what would be written…');
     try {
       plan = await api.portPlan(recipe());
+      nextBatchOffset = !plan.blocked && (plan.totals?.willWrite ?? 0) === 0
+        && shortfall(plan).length === 0 ? plan.nextBatchOffset : null;
+      nextBatchButton.disabled = nextBatchOffset == null;
       stop();
       clear(previewHost);
       showUsedArchives(plan);
@@ -1035,12 +1071,11 @@ function buildDialog({
       wholeArchive
         ? el('div', { class: 'port-empty' }, icon('info', { size: 15 }),
             el('span', { text:
-              'Everything of this kind in the archive comes across, so there is nothing for the link '
-              + 'switches to add — what one entry borrows from another is already in the import. Preview '
-              + 'first: it counts what is new, what the target already has and what cannot be carried, '
-              + 'and it is where an import too big to run says so.' }))
+              'Large imports run in batches, with dependencies checked in each batch. New images spread '
+              + 'across writable WZ siblings; existing entries stay in their original files. Save the '
+              + 'affected archives between batches to release undo memory, then preview the next batch.' }))
         : null,
-      el('div', { class: 'port-actions' }, previewButton, applyButton),
+      el('div', { class: 'port-actions' }, wholeArchive ? batchSize : null, previewButton, applyButton, wholeArchive ? saveBatchButton : null, wholeArchive ? nextBatchButton : null),
       previewHost),
   });
 
@@ -1077,6 +1112,9 @@ function buildDialog({
       clear(previewHost);
       previewHost.append(renderPlan(result.plan, { app, result }));
       applyButton.disabled = true;
+      nextBatchOffset = !result.plan.blocked && !result.failed && !result.needsDecision
+        && shortfall(result.plan).length === 0 ? result.plan.nextBatchOffset : null;
+      nextBatchButton.disabled = nextBatchOffset == null;
 
       app.markDirty();
       // Same rule as the result dialog's headline: a toast that says "Ported"

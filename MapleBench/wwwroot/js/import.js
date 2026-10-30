@@ -1124,51 +1124,19 @@ export function openImporter(app, startPath, { dual = false } = {}) {
             + (entries.totalBytes ? ` · ${bytes(entries.totalBytes)}` : ''))
         : null));
 
-    if (canPort && entries.totalBytes > (entries.maxArchiveBytes ?? Infinity)) {
-      trayHost.append(el('div', { class: 'imp-note', 'data-tone': 'bad' },
-        icon('alert', { size: 14 }),
-        el('span', { text: `Taking the whole archive would be ${bytes(entries.totalBytes)}, over the `
-                         + `${bytes(entries.maxArchiveBytes)} cap, and will be refused. The cap is memory: `
-                         + 'an import holds a full copy of every node it wrote until you save. Pick what '
-                         + 'you need instead.' })));
-    } else if (canPort && !entries.totalBytes && entries.total > 0) {
-      // An archive assembled from a split client reports no size at all. Its
-      // images were merged in memory rather than read out of a .wz, so they carry
-      // no on-disk block size -- measured on this client's Mob, which indexes
-      // 11,959 entries and totals zero bytes. That is not a small archive; it is
-      // an unmeasured one, and the byte cap that would normally refuse a port
-      // this big cannot fire on a number that is zero. Said here rather than
-      // discovered when the process runs out of memory.
-      trayHost.append(el('div', { class: 'imp-note', 'data-tone': 'bad' },
-        icon('alert', { size: 14 }),
-        el('span', { text: `${entries.archive} was assembled in memory from the split client, so its `
-                         + 'entries carry no on-disk size and nothing can weigh this before it runs — '
-                         + `including the ${bytes(entries.maxArchiveBytes)} cap that would otherwise `
-                         + `refuse it. ${fmt.format(entries.total)} entries is a lot to hold at once. `
-                         + 'Preview it, read the counts, and prefer picking what you need.' })));
+    if (canPort && entries.total > 200) {
+      trayHost.append(el('div', { class: 'imp-note' },
+        icon('info', { size: 14 }),
+        el('span', { text: 'This archive will be imported in batches with dependency checks. '
+          + 'New images are distributed across writable target siblings. Save between batches, '
+          + 'then continue using Preview next batch.' })));
     }
   };
 
-  const archiveTip = () => {
-    const bits = [
-      `Every ${entries.label.toLowerCase()} in ${entries.archive}, with each one's name, sounds and `
-      + 'shop row.',
-      'You will get the preview first — at this size nothing is written until you have seen the counts.',
-    ];
-    // Said on the button, because it is the one thing about this scope that
-    // differs from ticking things by hand, and finding it in the small print
-    // afterwards is finding it too late.
-    bits.push('At this scale nothing is parsed to chase art links: everything of this kind is coming '
-            + 'anyway, but art an entry borrows from another ARCHIVE is not followed. Import a handful '
-            + 'the ordinary way if you want that checked.');
-    if (entries.totalBytes > (entries.maxArchiveBytes ?? Infinity)) {
-      bits.push(`This one is ${bytes(entries.totalBytes)} against a ${bytes(entries.maxArchiveBytes)} `
-              + 'cap and will be refused.');
-    } else if (!entries.totalBytes) {
-      bits.push('This archive was assembled in memory, so nothing can say what it weighs before it runs.');
-    }
-    return bits.join(' ');
-  };
+  const archiveTip = () =>
+    `Import every ${entries.label.toLowerCase()} in ${entries.archive} in reviewed batches. `
+    + 'Each batch follows art links and checks dependencies. The memory limit applies to each batch, '
+    + 'while each saved WZ must fit below 4 GiB.';
 
   const clearPicked = () => {
     picked.clear();

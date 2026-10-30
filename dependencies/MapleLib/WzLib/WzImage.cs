@@ -215,7 +215,10 @@ namespace MapleLib.WzLib
             }
             WzImage clone = new(name)
             {
-                bIsImageChanged = true
+                bIsImageChanged = true,
+                // Retain a planning estimate for unsaved imports. SaveImage
+                // replaces this with the actual serialized size before writing.
+                size = size
             };
             foreach (WzImageProperty prop in properties)
                 clone.AddProperty(prop.DeepClone());
