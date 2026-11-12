@@ -2787,7 +2787,8 @@ public sealed class PortService
                 plan.Warnings.Add(
                     $"No canvas in the {FormatSampleImages} images sampled from {target.Name} could be read, "
                     + "so there is no way to tell which compression formats this client understands and "
-                    + "nothing will be re-encoded. Frames arrive in whatever format the source stored them in — "
+                    + "only known ARGB1555 scaling incompatibilities will be normalized to BGRA32. "
+                    + "Other frames arrive in whatever format the source stored them in — "
                     + "on a modern source that is Format4098 (BC7, a DirectX 11 block format), which a "
                     + "client rendering through DirectX 9 loads without complaint and draws as nothing.");
             }
@@ -2806,13 +2807,14 @@ public sealed class PortService
                 {
                     plan.Warnings.Add(
                         $"{foreign:N0} {(foreign == 1 ? "frame" : "frames")} this port carries "
-                        + $"{(foreign == 1 ? "is" : "are")} compressed in a format this client's own art "
-                        + $"never uses ({string.Join(", ", foreignNames.Take(4))}"
+                        + $"{(foreign == 1 ? "requires" : "require")} canvas compatibility conversion "
+                        + $"({string.Join(", ", foreignNames.Take(4))}"
                         + (foreignNames.Count > 4 ? $" and {foreignNames.Count - 4} more" : "")
                         + $"; the target's vocabulary is {string.Join(", ", formats.OrderBy(f => f))}). "
-                        + "They will be re-encoded when the port is applied. Any frame the encoder cannot "
-                        + "re-encode — below 64x64, or with a side that is not a multiple of four — stays "
-                        + "as it arrived and will draw nothing.");
+                        + "ARGB1555 (Format257) will be expanded to BGRA32 because legacy scaled rendering "
+                        + "can make it invisible even when decoding succeeds. Other foreign formats will be "
+                        + "re-encoded when the port is applied. Conversion failures and output formats "
+                        + "still unsupported by the target are reported for review.");
                 }
             }
 
@@ -3424,8 +3426,8 @@ public sealed class PortService
                             {
                                 copiedOwner.Changed = true;
                                 _log.LogInformation(
-                                    "Re-encoded {Count} canvases in {Path}: the target client's own art uses "
-                                    + "{Formats}, and these were in a format it has none of.",
+                                    "Re-encoded {Count} canvases in {Path} for foreign-format or legacy scaling "
+                                    + "compatibility; sampled target formats: {Formats}.",
                                     recoded, path, string.Join(", ", formats));
                             }
                         }
@@ -7771,7 +7773,7 @@ public sealed class PortService
                     if (child is WzCanvasProperty canvas && canvas.PngProperty is { } png)
                     {
                         seen++;
-                        if (!supported.Contains(png.Format))
+                        if (png.Format == WzPngFormat.Format257 || !supported.Contains(png.Format))
                         {
                             count++;
                             formats.Add(png.Format.ToString());
@@ -7784,7 +7786,7 @@ public sealed class PortService
             if (node is WzCanvasProperty own && own.PngProperty is { } topPng)
             {
                 seen++;
-                if (!supported.Contains(topPng.Format))
+                if (topPng.Format == WzPngFormat.Format257 || !supported.Contains(topPng.Format))
                 {
                     count++;
                     formats.Add(topPng.Format.ToString());
@@ -7933,9 +7935,6 @@ public sealed class PortService
         WzObject node, HashSet<WzPngFormat> supported, out int refused)
     {
         refused = 0;
-        if (supported.Count == 0)
-            return 0;
-
         WzPropertyCollection? roots = RootsOf(node);
         if (roots == null)
             return 0;
@@ -7974,65 +7973,77 @@ public sealed class PortService
             {
                 if (property is WzCanvasProperty canvas
                     && canvas.PngProperty is { } png
-                    && !supported.Contains(png.Format))
+                    && (png.Format == WzPngFormat.Format257
+                        || (supported.Count > 0 && !supported.Contains(png.Format))))
                 {
                     try
                     {
-                        using System.Drawing.Bitmap? art = png.GetImage(false);
-                        if (art != null)
+                        // Presence in a sampled archive is not proof of rendering
+                        // support: v232 loads257 but blanks it during CopyEx scaling.
+                        if (png.NormalizeForLegacyScaling())
                         {
-                            // The PNG setter, not SetCompressedBytes.
-                            //
-                            // SetCompressedBytes stores what it is given as the
-                            // stored block, which is zlib-compressed and, in a
-                            // listWz archive, wrapped again. Handing it the raw
-                            // output of an encoder writes uncompressed bytes into
-                            // a slot that will be inflated on read: MapleLib's own
-                            // reader then fails the archive with "Invalid listWz
-                            // PNG block size", and that is what shipped. This
-                            // setter runs the whole pipeline -- pick a format,
-                            // encode, compress, wrap -- the way a canvas written
-                            // from scratch would be.
-                            //
-                            // It picks the format itself, from Dxt3, Dxt5,
-                            // Bgra32, Bgra5551, Bgra4444 and Bgr565, honouring the
-                            // multiple-of-four rule the DXT encoders require. BC7
-                            // is not among them, which is the whole point: it
-                            // cannot reintroduce the format that started this.
-                            png.PNG = art;
+                            changed++;
+                        }
+                        else
+                        {
+                            using System.Drawing.Bitmap? art = png.GetImage(false);
+                            if (art != null)
+                            {
+                                // The PNG setter, not SetCompressedBytes.
+                                //
+                                // SetCompressedBytes stores what it is given as the
+                                // stored block, which is zlib-compressed and, in a
+                                // listWz archive, wrapped again. Handing it the raw
+                                // output of an encoder writes uncompressed bytes into
+                                // a slot that will be inflated on read: MapleLib's own
+                                // reader then fails the archive with "Invalid listWz
+                                // PNG block size", and that is what shipped. This
+                                // setter runs the whole pipeline -- pick a format,
+                                // encode, compress, wrap -- the way a canvas written
+                                // from scratch would be.
+                                //
+                                // It picks the format itself, from Dxt3, Dxt5,
+                                // Bgra32, Bgra5551, Bgra4444 and Bgr565, honouring the
+                                // multiple-of-four rule the DXT encoders require. BC7
+                                // is not among them, which is the whole point: it
+                                // cannot reintroduce the format that started this.
+                                png.PNG = art;
 
-                            // Magnification does not survive a re-encode, and the
-                            // setter does not clear it. SetCompressedBytes does
-                            // (WzPngProperty, "these bytes are the whole picture at
-                            // the size just given"), and this is the same
-                            // situation: the bitmap handed back by GetImage is at
-                            // the stored width and height with no scaling applied,
-                            // so a leftover mag makes the client stride the rows
-                            // wrong -- mag 8 on a 288-wide canvas gives it a row
-                            // width of 1. Measured: a v232 Skill.wz holds 4,043
-                            // canvases with a non-zero mag, and one 422.img in this
-                            // user's own archives carries 67 of them as an artefact
-                            // of an old writer bug.
-                            png.Mag = 0;
+                                // Magnification does not survive a re-encode, and the
+                                // setter does not clear it. SetCompressedBytes does
+                                // (WzPngProperty, "these bytes are the whole picture at
+                                // the size just given"), and this is the same
+                                // situation: the bitmap handed back by GetImage is at
+                                // the stored width and height with no scaling applied,
+                                // so a leftover mag makes the client stride the rows
+                                // wrong -- mag 8 on a 288-wide canvas gives it a row
+                                // width of 1. Measured: a v232 Skill.wz holds 4,043
+                                // canvases with a non-zero mag, and one 422.img in this
+                                // user's own archives carries 67 of them as an artefact
+                                // of an old writer bug.
+                                png.Mag = 0;
+                                // Automatic encoding may itself select ARGB1555.
+                                bool scalingNormalized = png.NormalizeForLegacyScaling();
 
-                            // What came out, not what went in.
-                            //
-                            // The encoder picks the format from the pixels: it is
-                            // a fixed function of the content, not something this
-                            // can steer, and it can perfectly well land on another
-                            // format the target has none of. Measured on this port
-                            // with a vocabulary that (wrongly) excluded Format2050:
-                            // 47 of 48 frames came back AS Format2050 and every one
-                            // was counted a success, log line and all. And any
-                            // canvas below 64x64 can never be DXT at all, so the
-                            // six icons came back Format257 -- a format occurring
-                            // zero times in 118,831 canvases of the target's own
-                            // art. `refused` counted throws only, so the warning
-                            // that exists for exactly this said nothing.
-                            if (!supported.Contains(png.Format))
-                                couldNot++;
-                            else
-                                changed++;
+                                // What came out, not what went in.
+                                //
+                                // The encoder picks the format from the pixels: it is
+                                // a fixed function of the content, not something this
+                                // can steer, and it can perfectly well land on another
+                                // format the target has none of. Measured on this port
+                                // with a vocabulary that (wrongly) excluded Format2050:
+                                // 47 of 48 frames came back AS Format2050 and every one
+                                // was counted a success, log line and all. And any
+                                // canvas below 64x64 can never be DXT at all, so the
+                                // six icons came back Format257 -- a format occurring
+                                // zero times in 118,831 canvases of the target's own
+                                // art. `refused` counted throws only, so the warning
+                                // that exists for exactly this said nothing.
+                                if (!scalingNormalized && !supported.Contains(png.Format))
+                                    couldNot++;
+                                else
+                                    changed++;
+                            }
                         }
                     }
                     catch

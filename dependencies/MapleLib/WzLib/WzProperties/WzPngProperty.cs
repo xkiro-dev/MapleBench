@@ -232,6 +232,44 @@ namespace MapleLib.WzLib.WzProperties
         }
 
         /// <summary>
+        /// Expands ARGB1555 to BGRA32 for legacy clients whose CopyEx scaling
+        /// silently produces transparent pixels for format257. A direct draw or
+        /// successful decode does not establish scaling support. No bitmap API
+        /// or lossy format selection is involved; other encodings are untouched.
+        /// </summary>
+        public bool NormalizeForLegacyScaling()
+        {
+            lock (imageLock)
+            {
+                if (format != WzPngFormat.Format257)
+                    return false;
+                if (mag != 0)
+                    throw new InvalidDataException("Cannot normalize a magnified ARGB1555 canvas safely.");
+                int count = checked(width * height);
+                if (width <= 0 || height <= 0)
+                    throw new InvalidDataException("Invalid ARGB1555 canvas dimensions.");
+                byte[] source = GetRawImage(false);
+                if (source == null || source.Length != checked(count * 2))
+                    throw new InvalidDataException("Invalid ARGB1555 canvas payload.");
+                byte[] output = new byte[checked(count * 4)];
+                for (int i = 0; i < count; i++)
+                {
+                    int pixel = source[i * 2] | (source[i * 2 + 1] << 8);
+                    for (int channel = 0; channel < 3; channel++)
+                    {
+                        int component = (pixel >> (channel * 5)) & 31;
+                        output[i * 4 + channel] = (byte)((component << 3) | (component >> 2));
+                    }
+                    output[i * 4 + 3] = (byte)((pixel & 0x8000) != 0 ? 255 : 0);
+                }
+                byte[] encoded = Compress(output);
+                SetCompressedBytes(encoded, width, height, WzPngFormat.Format2);
+                listWzUsed = false; // encoded is standard zlib, not a keyed block stream
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Creates a blank WzPngProperty
         /// </summary>
         public WzPngProperty() { }

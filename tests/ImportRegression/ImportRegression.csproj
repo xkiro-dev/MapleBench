@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
     <Reference Include="MapleBench"><HintPath>../../MapleBench/bin/Release/net10.0-windows/MapleBench.dll</HintPath></Reference>
     <Reference Include="MapleLib"><HintPath>../../dependencies/MapleLib/bin/Release/net10.0-windows/MapleLib.dll</HintPath></Reference>
   </ItemGroup>

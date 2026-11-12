@@ -8,8 +8,47 @@ using MapleLib.WzLib.Util;
 using MapleBench.Models;
 using System.Collections;
 
+using System.IO.Compression;
 int checks = 0;
 void Check(bool value, string name) { if (!value) throw new Exception(name); checks++; Console.WriteLine("PASS " + name); }
+// Imported ARGB1555 decodes but v232 CopyEx silently blanks it when scaling.
+// Test the real converter without constructing a System.Drawing bitmap.
+var normalize = typeof(WzPngProperty).GetMethod("NormalizeForLegacyScaling", Type.EmptyTypes);
+Check(normalize != null, "legacy scaling normalization is available");
+byte[] CompressPixels(byte[] pixels) {
+    using var output = new MemoryStream();
+    using (var z = new ZLibStream(output, CompressionLevel.Optimal, true)) z.Write(pixels);
+    return output.ToArray();
+}
+byte[] InflatePixels(WzPngProperty png) {
+    var stored = png.GetCompressedBytesForExtraction(false);
+    using var input = new MemoryStream(stored, 2, stored.Length - 2);
+    using var z = new DeflateStream(input, CompressionMode.Decompress);
+    using var output = new MemoryStream(); z.CopyTo(output); return output.ToArray();
+}
+var legacyPng = new WzPngProperty();
+legacyPng.SetCompressedBytes(CompressPixels(new byte[] {0,0, 0,128, 255,255, 0,252}), 4,1,WzPngFormat.Format257);
+Check((bool)normalize!.Invoke(legacyPng,null)!, "ARGB1555 normalized");
+Check(legacyPng.Format == WzPngFormat.Format2 && legacyPng.Mag == 0, "normalized canvas is unscaled BGRA32");
+Check(InflatePixels(legacyPng).SequenceEqual(new byte[] {0,0,0,0, 0,0,0,255, 255,255,255,255, 0,0,255,255}), "normalization preserves color and binary alpha");
+var once = legacyPng.GetCompressedBytes(false).ToArray();
+Check(!(bool)normalize.Invoke(legacyPng,null)! && once.SequenceEqual(legacyPng.GetCompressedBytes(false)), "normalization is idempotent");
+var magnifiedPng = new WzPngProperty();
+magnifiedPng.SetCompressedBytes(CompressPixels(new byte[] {255,255}),1,1,WzPngFormat.Format257);magnifiedPng.Mag=1;
+try { normalize.Invoke(magnifiedPng,null); throw new Exception("nonzero mag accepted"); }
+catch (TargetInvocationException e) when (e.InnerException is InvalidDataException) { Check(magnifiedPng.Format==WzPngFormat.Format257 && magnifiedPng.Mag==1,"unsupported magnification refuses without replacing pixels"); }
+var retarget = typeof(PortService).GetMethod("RetargetCanvasFormats", BindingFlags.NonPublic | BindingFlags.Static)!;
+foreach (var vocabulary in new[] {new HashSet<WzPngFormat>(), new HashSet<WzPngFormat>{WzPngFormat.Format257}}) {
+    var image = new WzImage("sample.img");
+    var canvas = new WzCanvasProperty("iconRaw") {PngProperty = new WzPngProperty()};
+    canvas.PngProperty.SetCompressedBytes(CompressPixels(new byte[]{255,255}),1,1,WzPngFormat.Format257);
+    canvas.AddProperty(new WzStringProperty("_outlink", "Character/Cap/01000000.img/info/iconRaw"));
+    image.AddProperty(canvas);
+    object[] arguments = {image,vocabulary,0};
+    Check((int)retarget.Invoke(null,arguments)! == 1 && (int)arguments[2] == 0 && canvas.PngProperty.Format == WzPngFormat.Format2,
+        "port normalizes257 even with empty or contaminated target vocabulary");
+    Check(canvas["_outlink"].GetString()=="Character/Cap/01000000.img/info/iconRaw", "normalization preserves canvas links");
+}
 Check(WzSizeLimits.Advance(0x7fffffff, 1) == 0x80000000, "cross signed 2 GiB boundary");
 Check(WzSizeLimits.Advance(0xfffffffe, 1) == uint.MaxValue, "last unsigned address");
 try { WzSizeLimits.Advance(uint.MaxValue, 1); throw new Exception("overflow accepted"); }
